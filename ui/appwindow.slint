@@ -125,7 +125,7 @@ component NeonSlider inherits Rectangle {
 }
 
 // ============================================================================
-// GAUGE CIRCOLARE AD ARCO APERTO IN BASSO (270°) — ZERO OVERHEAD GPU/RAM
+// GAUGE CIRCOLARE AD ARCO APERTO IN BASSO (260°) — ALTA DEFINIZIONE & ZERO OVERHEAD
 // ============================================================================
 component ArcGauge inherits Rectangle {
     in property <int> percentage: 75;
@@ -134,40 +134,52 @@ component ArcGauge inherits Rectangle {
     in property <string> glow-style: "subtle";
     callback adjusted(int);
 
-    width: 118px;
-    height: 118px;
+    width: 124px;
+    height: 124px;
     background: transparent;
 
-    // 45 segmenti circolari sovrapposti lungo 270° (-225° .. +39°) che formano un arco continuo
-    for step[idx] in 45 : Rectangle {
-        property <angle> ang: -225deg + idx * 6deg;
-        property <length> rad: 48px;
-        property <bool> active: (idx * 100 / 44) <= root.percentage;
-
-        width: 7px;
-        height: 7px;
-        border-radius: 3.5px;
-        x: 59px + Math.cos(self.ang) * self.rad - 3.5px;
-        y: 59px + Math.sin(self.ang) * self.rad - 3.5px;
-        background: self.active ? root.accent : #373c48;
+    // Sfondo interno circolare satinato scuro
+    Rectangle {
+        width: 86px;
+        height: 86px;
+        border-radius: 43px;
+        background: #171b23;
+        border-width: 1px;
+        border-color: #262c38;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
     }
 
-    // Testo centrale percentuale + sottotitolo come nel mockup
+    // Traccia scura e arco di avanzamento a 70 segmenti sovrapposti continui (passo 3.7°, raggio 47px)
+    for step[idx] in 70 : Rectangle {
+        property <angle> ang: -220deg + idx * 3.768deg;
+        property <length> rad: 47px;
+        property <bool> active: (idx * 100 / 69) <= root.percentage;
+
+        width: 7.5px;
+        height: 7.5px;
+        border-radius: 3.75px;
+        x: 62px + Math.cos(self.ang) * self.rad - 3.75px;
+        y: 62px + Math.sin(self.ang) * self.rad - 3.75px;
+        background: self.active ? root.accent : #262c38;
+    }
+
+    // Testo centrale percentuale + dicitura nitida come nel mockup
     VerticalLayout {
         alignment: center;
-        spacing: 1px;
+        spacing: 2px;
         Text {
             text: "\{root.percentage}%";
-            color: #f3f5f9;
-            font-size: 25px;
-            font-weight: 700;
+            color: #ffffff;
+            font-size: 26px;
+            font-weight: 800;
             horizontal-alignment: center;
         }
         Text {
             text: root.label;
-            color: #9ba3b2;
+            color: #9da5b4;
             font-size: 11px;
-            font-weight: 500;
+            font-weight: 600;
             horizontal-alignment: center;
         }
     }
@@ -388,10 +400,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.05";
-    in-out property <string> update-status-text: "Monitor Manager v1.05 (Dark Matte Titanium)";
+    in-out property <string> app-version: "1.06";
+    in-out property <string> update-status-text: "Monitor Manager v1.06 (Dark Matte Titanium)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.05";
+    in-out property <string> latest-version: "1.06";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -503,32 +515,91 @@ export component AppWindow inherits Window {
                             spacing: 10px;
                             alignment: start;
 
-                            // Icona monitor azzurra/scura come nel mockup
+                            // Icona monitor vettoriale fedele al mockup (schermo + piedistallo)
                             Rectangle {
                                 width: 22px;
-                                height: 18px;
+                                height: 22px;
                                 y: (parent.height - self.height) / 2;
-                                border-radius: 3px;
-                                background: #182232;
-                                border-width: 1.5px;
-                                border-color: #4aa3df;
+                                background: transparent;
 
+                                // Schermo
                                 Rectangle {
-                                    width: 16px;
-                                    height: 10px;
-                                    x: 3px;
-                                    y: 3px;
+                                    x: 1px;
+                                    y: 1px;
+                                    width: 20px;
+                                    height: 14px;
+                                    border-radius: 3px;
+                                    border-width: 1.5px;
+                                    border-color: #4aa3df;
+                                    background: #151b26;
+
+                                    // Display interno attivo
+                                    Rectangle {
+                                        x: 2px;
+                                        y: 2px;
+                                        width: 13px;
+                                        height: 7px;
+                                        border-radius: 1px;
+                                        background: @linear-gradient(135deg, #3ea8ff 0%, #1565c0 100%);
+                                    }
+                                }
+
+                                // Gambo piedistallo
+                                Rectangle {
+                                    x: 9.5px;
+                                    y: 15px;
+                                    width: 3px;
+                                    height: 3px;
+                                    background: #4aa3df;
+                                }
+
+                                // Base piedistallo
+                                Rectangle {
+                                    x: 5px;
+                                    y: 18px;
+                                    width: 12px;
+                                    height: 2px;
                                     border-radius: 1px;
-                                    background: @linear-gradient(135deg, #3ea8ff 0%, #1b5c9e 100%);
+                                    background: #4aa3df;
                                 }
                             }
 
-                            Text {
-                                text: "Monitor Manager";
-                                color: #e9edf5;
-                                font-size: 14px;
-                                font-weight: 600;
-                                vertical-alignment: center;
+                            // Titolo tipografico raffinato con micro-badge DDC/CI
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: start;
+                                y: (parent.height - self.height) / 2;
+
+                                Text {
+                                    text: "Monitor Manager";
+                                    color: #ffffff;
+                                    font-size: 15px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+
+                                Rectangle {
+                                    height: 18px;
+                                    border-radius: 4px;
+                                    background: #21252e;
+                                    border-width: 1px;
+                                    border-color: #333a48;
+                                    y: (parent.height - self.height) / 2;
+
+                                    HorizontalLayout {
+                                        padding-left: 6px;
+                                        padding-right: 6px;
+                                        alignment: center;
+                                        Text {
+                                            text: "DDC/CI";
+                                            color: #4aa3df;
+                                            font-size: 9px;
+                                            font-weight: 700;
+                                            letter-spacing: 0.5px;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -829,7 +900,7 @@ export component AppWindow inherits Window {
 
                         HorizontalLayout {
                             padding-left: 22px;
-                            padding-right: 0px;
+                            padding-right: 14px;
                             spacing: 0px;
 
                             // Zona comandi rapidi header
@@ -930,67 +1001,81 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            // Blocco Tasti Finestra in alto a destra (esattamente come nel mockup!)
+                            // Blocco Tasti Finestra in alto a destra (Pillola corallo/arancio del mockup con icone definite)
                             Rectangle {
-                                width: 118px;
-                                height: 32px;
-                                y: 0px;
-                                border-radius: 6px;
-                                background: root.accent-main;
+                                width: 114px;
+                                height: 30px;
+                                y: 4px;
+                                border-radius: 7px;
+                                background: #f05a46;
 
                                 HorizontalLayout {
                                     spacing: 0px;
 
-                                    // Riduci a icona (—)
+                                    // Riduci a icona (trattino bianco)
                                     min-btn := Rectangle {
                                         horizontal-stretch: 1;
-                                        background: min-ta.has-hover ? #00000022 : transparent;
-                                        border-radius: 6px;
-                                        Text {
-                                            text: "—";
-                                            color: #ffffff;
-                                            font-size: 12px;
-                                            font-weight: 700;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
+                                        background: min-ta.has-hover ? #00000028 : transparent;
+                                        border-top-left-radius: 7px;
+                                        border-bottom-left-radius: 7px;
+
+                                        Rectangle {
+                                            width: 10px;
+                                            height: 2px;
+                                            border-radius: 1px;
+                                            background: #ffffff;
+                                            x: (parent.width - self.width) / 2;
+                                            y: (parent.height - self.height) / 2;
                                         }
+
                                         min-ta := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => { root.minimize-window(); }
                                         }
                                     }
 
-                                    // Ingrandisci / Ripristina (▢)
+                                    // Ingrandisci / Ripristina (quadratino bianco)
                                     max-btn := Rectangle {
                                         horizontal-stretch: 1;
-                                        background: max-ta.has-hover ? #00000022 : transparent;
-                                        Text {
-                                            text: "▢";
-                                            color: #ffffff;
-                                            font-size: 12px;
-                                            font-weight: 700;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
+                                        background: max-ta.has-hover ? #00000028 : transparent;
+
+                                        Rectangle {
+                                            width: 10px;
+                                            height: 10px;
+                                            border-width: 1.6px;
+                                            border-color: #ffffff;
+                                            border-radius: 1.5px;
+                                            background: transparent;
+                                            x: (parent.width - self.width) / 2;
+                                            y: (parent.height - self.height) / 2;
                                         }
+
                                         max-ta := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => { root.toggle-maximize-window(); }
                                         }
                                     }
 
-                                    // Chiudi / System Tray (✕)
+                                    // Chiudi / System Tray (X bianca vettoriale con hover rosso scuro)
                                     cls-btn := Rectangle {
                                         horizontal-stretch: 1;
-                                        background: cls-ta.has-hover ? #00000038 : transparent;
-                                        border-radius: 6px;
-                                        Text {
-                                            text: "✕";
-                                            color: #ffffff;
-                                            font-size: 12px;
-                                            font-weight: 700;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
+                                        background: cls-ta.has-hover ? #c5221f : transparent;
+                                        border-top-right-radius: 7px;
+                                        border-bottom-right-radius: 7px;
+
+                                        Path {
+                                            width: 10px;
+                                            height: 10px;
+                                            stroke: #ffffff;
+                                            stroke-width: 1.8px;
+                                            x: (parent.width - self.width) / 2;
+                                            y: (parent.height - self.height) / 2;
+                                            MoveTo { x: 0; y: 0; }
+                                            LineTo { x: 10; y: 10; }
+                                            MoveTo { x: 10; y: 0; }
+                                            LineTo { x: 0; y: 10; }
                                         }
+
                                         cls-ta := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => { root.close-window(); }
@@ -1934,10 +2019,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.05 (DARK MATTE TITANIUM)
+// FINESTRA INSTALLER SETUP v1.06 (DARK MATTE TITANIUM)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.05";
+    title: "Installazione Monitor Manager v1.06";
     preferred-width: 520px;
     preferred-height: 410px;
     background: #171a21;
@@ -1948,7 +2033,7 @@ export component SetupWindow inherits Window {
     in-out property <bool> opt-launch: true;
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.05 (Dark Matte Titanium)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.06 (Dark Matte Titanium)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -1972,7 +2057,7 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.05";
+                        text: "Monitor Manager v1.06";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
@@ -2059,7 +2144,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione..." : "Installa v1.05 Ora";
+                    text: root.installing ? "Installazione..." : "Installa v1.06 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;
