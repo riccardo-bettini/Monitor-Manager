@@ -14,15 +14,17 @@ use tao::platform::windows::WindowExtWindows;
 use tao::window::{Icon as WindowIcon, WindowBuilder};
 use wry::WebViewBuilder;
 
-const APP_VERSION: &str = "1.00";
+const APP_VERSION: &str = "1.01";
 const APP_NAME: &str = "Monitor Manager";
 const PAYLOAD_EXE: &[u8] = include_bytes!("../../target/release/monitor-manager.exe");
+const WEBVIEW2_LOADER: &[u8] = include_bytes!("../../target/release/WebView2Loader.dll");
 
 #[derive(Debug)]
 enum SetupEvent {
     DragWindow,
     CloseWindow,
     InstallProgress { step: String, percent: u32 },
+    #[allow(dead_code)]
     InstallSuccess { install_dir: String, launch: bool },
     InstallError(String),
 }
@@ -280,11 +282,14 @@ fn perform_installation(
         .map_err(|e| format!("Impossibile creare la cartella di installazione: {}", e))?;
 
     let exe_path = install_dir.join("monitor-manager.exe");
+    let loader_path = install_dir.join("WebView2Loader.dll");
     let icon_path = install_dir.join("MonitorManager.ico");
 
-    report("Copia dei file nativi di Monitor Manager v1.00...", 45);
+    report("Copia dei file nativi di Monitor Manager v1.01...", 45);
     fs::write(&exe_path, PAYLOAD_EXE)
         .map_err(|e| format!("Impossibile scrivere monitor-manager.exe: {}", e))?;
+    fs::write(&loader_path, WEBVIEW2_LOADER)
+        .map_err(|e| format!("Impossibile scrivere WebView2Loader.dll: {}", e))?;
 
     let ico_bytes = build_ico_bytes();
     let _ = fs::write(&icon_path, ico_bytes);
@@ -451,7 +456,7 @@ body {{
                 </div>
                 <div class="title">
                     <h1>Monitor Manager — Setup</h1>
-                    <span>Versione v1.00 • Windows Native</span>
+                    <span>Versione v1.01 • Windows Native</span>
                 </div>
             </div>
             <button class="close-btn" onclick="send({{cmd:'close'}})">✕</button>
@@ -489,7 +494,7 @@ body {{
         </div>
 
         <div class="footer">
-            <button class="btn-primary" id="action-btn" onclick="onMainAction()">Installa Monitor Manager v1.00</button>
+            <button class="btn-primary" id="action-btn" onclick="onMainAction()">Installa Monitor Manager v1.01</button>
         </div>
     </div>
 
@@ -527,7 +532,7 @@ window.onSetupEvent = function(ev) {{
     }} else if (ev.type === 'done') {{
         installed = true;
         document.getElementById('progress-fill').style.width = '100%';
-        document.getElementById('status-label').textContent = '✓ Monitor Manager v1.00 è stato installato sul tuo PC!';
+        document.getElementById('status-label').textContent = '✓ Monitor Manager v1.01 è stato installato sul tuo PC!';
         const btn = document.getElementById('action-btn');
         btn.disabled = false;
         btn.textContent = ev.launch ? 'Avvia Monitor Manager e Chiudi' : 'Chiudi Setup';
@@ -546,6 +551,15 @@ window.onSetupEvent = function(ev) {{
 }
 
 fn main() {
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(dir) = exe_path.parent() {
+            let loader = dir.join("WebView2Loader.dll");
+            if !loader.exists() {
+                let _ = fs::write(loader, WEBVIEW2_LOADER);
+            }
+        }
+    }
+
     // Supporto installazione rapida silenziosa (--silent)
     if env::args().any(|a| a == "--silent") {
         let opts = InstallOptions {
@@ -565,7 +579,7 @@ fn main() {
     let icon = WindowIcon::from_rgba(rgba, w, h).ok();
 
     let window = WindowBuilder::new()
-        .with_title("Monitor Manager v1.00 — Setup")
+        .with_title("Monitor Manager v1.01 — Setup")
         .with_inner_size(Size::Logical(LogicalSize::new(540.0, 470.0)))
         .with_resizable(false)
         .with_decorations(false)

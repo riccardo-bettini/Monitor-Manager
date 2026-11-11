@@ -1,12 +1,12 @@
 [package]
 name = "monitor-manager"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 description = "Universal DDC/CI Monitor Manager with Apple iOS 26 Liquid Glass UI"
 authors = ["Riccardo Bettini"]
 
 [package.metadata.monitor_manager]
-display_version = "1.00"
+display_version = "1.01"
 github_repo = "riccardo-bettini/Monitor-Manager"
 
 [[bin]]

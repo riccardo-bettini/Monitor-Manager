@@ -5,12 +5,14 @@ Questo file definisce le regole operative, il ciclo di vita delle versioni e le 
 ---
 
 ## 1. Schema di Versionamento
-- **Versione di partenza**: Si parte rigorosamente da **`v1.00`** (non 0.1 o simili).
-- **Incremento incrementale**: Ogni nuova versione avanza di **`+0.01`** alla volta (es. `v1.00` → `v1.01` → `v1.02` → `v1.03` ...).
-- **Sincronizzazione versione**: Il numero di versione deve essere sempre allineato in:
-  - `Cargo.toml` (es. `version = "1.0.0"` / label esposta `1.00`)
-  - Costante interna dell'app per l'auto-updater
-  - Tag Git e Release su GitHub
+- **Versione di partenza**: Si parte da **`v1.00`** (rilasciata).
+- **Incremento incrementale obbligatorio**: **OGNI** singola modifica, correzione, aggiunta di feature o ritocco (anche minimo) comporta tassativamente l'avanzamento della versione di **`+0.01`** (es. `v1.00` → `v1.01` → `v1.02` → `v1.03` ...).
+- **Allineamento Versioni**: A ogni modifica, il nuovo numero di versione deve essere aggiornato sincronizzatamente in:
+  - `Cargo.toml` (`display_version` e `version`)
+  - `src/updater.rs` (`APP_VERSION`)
+  - `src/bin/setup.rs` (`APP_VERSION`)
+  - Eventuali riferimenti UI e documentazione
+
 
 ---
 

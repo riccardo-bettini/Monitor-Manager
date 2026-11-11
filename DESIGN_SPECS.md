@@ -98,4 +98,66 @@ Ispirazione estetica: **Apple iOS 26 Liquid Glass**
   - Notifica Liquid Glass con pulsante *"Aggiorna e Riavvia ora"* (download `.exe` da GitHub Releases, sostituzione eseguibile e riavvio automatico).
   - Opzione *"Avvia automaticamente con Windows"* nelle Impostazioni.
 
+---
+
+## 7. Nuova Struttura di Layout Dashboard (Ispirazione "Glassy Dashboard V24")
+
+Dall'analisi del video ("Glassy Dashboard V24"), la struttura dell'applicazione si evolve verso una dashboard moderna organizzata a **due macro-blocchi fluttuanti in vetro satinato**:
+
+```
++-----------------------------------------------------------------------------------------------------------------+
+|                                        SFONDO LIQUID GLASS FLUIDO CON MACCHIE DI COLORE                         |
+|                                                                                                                 |
+|  +------------------------------+  +-------------------------------------------------------------------------+  |
+|  | SIDEBAR FLUTTUANTE A CAPSULA |  | PANNELLO PRINCIPALE DASHBOARD (Floating Glass Canvas)                   |  |
+|  | - Profilo / Logo App         |  |                                                                         |  |
+|  | - Mini-search / switch       |  |  [Header Saluto / Monitor Attivo]            [Azioni Rapide: Rescan, Sync]|  |
+|  |                              |  |                                                                         |  |
+|  | [MONITOR COLLEGATI]          |  |  +------------------------------------+  +----------------------------+ |  |
+|  | • ASUS TUF Gaming            |  |  | HERO CARD RISALTATA (Accent Glass) |  | SIDE WIDGET (Risoluzione,  | |  |
+|  | • AOC Gaming                 |  |  | Monitor attivo, stato connessione, |  | Input video attivo, Hz e   | |  |
+|  | • KTC Display                |  |  | indicatore circolare % / preset    |  | info hardware EDID)        | |  |
+|  |                              |  |  +------------------------------------+  +----------------------------+ |  |
+|  | [CATEGORIE CONTROLLO]        |  |                                                                         |  |
+|  | ☼ Luminosità & Contrasto     |  |  +---------------+ +---------------+ +---------------+ +---------------+  |  |
+|  | ◉ Colori & Bilanciamento RGB |  |  | STAT CARD 1   | | STAT CARD 2   | | STAT CARD 3   | | STAT CARD 4   |  |  |
+|  | ♫ Audio & Input Video        |  |  | Luminosità    | | Contrasto     | | Nitidezza     | | Saturazione   |  |  |
+|  |                              |  |  | [Valore & %]  | | [Valore & %]  | | [Valore & %]  | | [Valore & %]  |  |  |
+|  | [SISTEMA]                    |  |  +---------------+ +---------------+ +---------------+ +---------------+  |  |
+|  | ⚙ Impostazioni               |  |                                                                         |  |
+|  | ✦ Aggiornamenti GitHub       |  |  +----------------------------------------------------------------------+  |  |
+|  |                              |  |  | SLIDER INTERATTIVI ESTESI & SELETTORI RAPIDI CHIP IN VETRO SATINATO   |  |  |
+|  +------------------------------+  +-------------------------------------------------------------------------+  |
++-----------------------------------------------------------------------------------------------------------------+
+```
+
+### Dettaglio dei componenti strutturali:
+1. **Sidebar Laterale Fluttuante a Sinistra (Floating Glass Capsule Sidebar)**:
+   - Contenitore a capsula separato con vetro satinato ad alto blur, distaccato dai bordi della finestra.
+   - **Header**: Logo circolare luminescente `Monitor Manager` + nome profilo o postazione.
+   - **Sezione Monitor Collegati**: Elenco interattivo dei monitor fisici (ASUS, AOC, KTC) come voci selezionabili con stato di alimentazione e pill attiva.
+   - **Sezione Categorie**: Switch istantaneo tra le sezioni funzionali (*Panoramica Multi-Monitor*, *Display & Luminosità*, *Calibrazione Colore*, *Audio & Input*).
+   - **Footer**: Accesso rapido alle *Impostazioni*, stato aggiornamenti GitHub e controlli di sistema.
+
+2. **Hero Glass Card Superiore**:
+   - Card in primo piano con sfumatura vibrante ad alto contrasto (accent glass).
+   - Nome del monitor primario/selezionato in evidenza.
+   - **Widget circolare** percentuale (gauge interattivo per la luminosità o taratura globale).
+   - Azioni rapide a pillola: *"Sincronizza tutti"*, *"Rileva monitor"*, *"Preset rapido"*.
+
+3. **Side Widget Ausiliario**:
+   - Card affiancata alla Hero card dedicata a: risoluzione attuale, frequenza di aggiornamento, sorgente input attiva e indicatore DDC/CI.
+
+4. **Griglia Orizzontale a 4 "Stat Cards"**:
+   - 4 card rettangolari affiancate con angoli generosamente arrotondati e hover con fisica a molla (`whileHover: { y: -5 }`):
+     - **Card 1**: Luminosità (icona, valore %, slider rapido o barra di avanzamento).
+     - **Card 2**: Contrasto (icona, valore numerico).
+     - **Card 3**: Nitidezza / Sharpness (icona, livello VCP).
+     - **Card 4**: Saturazione / Colore (icona, livello VCP).
+
+5. **Pannello Controlli Dettagliati & Quick Action Pills**:
+   - Slider estesi con traccia vetrosa e thumb con riflesso speculare.
+   - Selettori a pillola/chip per *Temperatura Colore* (5000K, 6500K, 9300K, Utente) e *Sorgente Input* (DP1, DP2, HDMI1, HDMI2, USB-C).
+
+
 

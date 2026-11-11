@@ -3,6 +3,9 @@
 *.pdb
 *.old.exe
 *-Setup-*.exe
+*.WebView2/
+WebView2Loader.dll
 .DS_Store
 Thumbs.db
+
 

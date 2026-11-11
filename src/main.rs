@@ -132,6 +132,19 @@ fn build_bundled_html() -> String {
         .replace("/*__INLINE_JS__*/", raw_js)
 }
 
+const WEBVIEW2_LOADER_BYTES: &[u8] = include_bytes!("../target/release/WebView2Loader.dll");
+
+fn ensure_webview2_loader() {
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(dir) = exe_path.parent() {
+            let loader_path = dir.join("WebView2Loader.dll");
+            if !loader_path.exists() {
+                let _ = std::fs::write(loader_path, WEBVIEW2_LOADER_BYTES);
+            }
+        }
+    }
+}
+
 fn perform_uninstall() {
     use std::fs;
     use std::path::PathBuf;
@@ -203,6 +216,7 @@ fn main() {
         return;
     }
 
+    ensure_webview2_loader();
     updater::cleanup_old_executable();
 
     let start_minimized = env::args().any(|a| a == "--minimized");
@@ -249,7 +263,7 @@ fn main() {
 
     let _tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
-        .with_tooltip("Monitor Manager v1.00")
+        .with_tooltip("Monitor Manager v1.01")
         .with_icon(tray_icon_data)
         .build()
         .ok();

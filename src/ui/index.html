@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it" data-theme="dark">
+<html lang="it" data-theme="dark" data-palette="coral">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,239 +7,454 @@
     <style>/*__INLINE_CSS__*/</style>
 </head>
 <body>
-    <!-- Sfondo atmosferico Apple iOS 26 Liquid Glass con macchie di colore fluttuanti -->
-    <div class="ambient-canvas" aria-hidden="true">
-        <div class="color-blob blob-cyan"></div>
-        <div class="color-blob blob-indigo"></div>
-        <div class="color-blob blob-magenta"></div>
-        <div class="color-blob blob-emerald"></div>
-        <div class="ambient-noise"></div>
+    <!-- Sfondo atmosferico Liquid Glass con macchie di colore fluttuanti -->
+    <div class="ambient-canvas" id="ambient-canvas" aria-hidden="true">
+        <div class="color-blob blob-1"></div>
+        <div class="color-blob blob-2"></div>
+        <div class="color-blob blob-3"></div>
+        <div class="color-blob blob-4"></div>
     </div>
 
-    <div class="app-shell">
-        <!-- Barra del Titolo Custom in Vetro Liquido -->
-        <header class="glass-titlebar" id="titlebar">
-            <div class="titlebar-drag-region" id="titlebar-drag">
-                <div class="brand-logo">
-                    <div class="logo-glass-orb">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="2" y="3" width="20" height="14" rx="3"></rect>
-                            <line x1="8" y1="21" x2="16" y2="21"></line>
-                            <line x1="12" y1="17" x2="12" y2="21"></line>
-                        </svg>
-                    </div>
-                    <div class="brand-titles">
-                        <span class="app-name">Monitor Manager</span>
-                        <span class="app-version-pill" id="version-badge">v1.00</span>
-                    </div>
+    <!-- Layout Glassy Dashboard V24: Sidebar Fluttuante + Pannello Principale Vetroso -->
+    <div class="dashboard-workspace">
+        <!-- 1. SIDEBAR LATERALE FLUTTUANTE A CAPSULA -->
+        <aside class="floating-sidebar" id="sidebar">
+            <!-- Pulsante di compressione/espansione stile video (<) -->
+            <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Comprimi / Espandi barra laterale">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            <!-- Header Sidebar -->
+            <div class="sidebar-header" id="sidebar-drag">
+                <div class="workspace-logo">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="3"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                </div>
+                <div class="workspace-titles sidebar-text">
+                    <strong>Monitor Manager</strong>
+                    <span>Glassy Workspace • <em id="sidebar-ver">v1.01</em></span>
                 </div>
             </div>
 
-            <!-- Controlli Rapidi Centrali (Layout & Sync) -->
-            <div class="titlebar-QuickControls">
-                <div class="segmented-glass" id="quick-layout-toggle" title="Modalità di visualizzazione monitor">
-                    <button class="seg-btn active" data-layout="multi" onclick="setLayoutMode('multi')">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="4" width="8" height="16" rx="2"></rect>
-                            <rect x="13" y="4" width="8" height="16" rx="2"></rect>
-                        </svg>
-                        <span>Affiancati</span>
+            <!-- Barra di Ricerca / Filtro Rapido -->
+            <div class="sidebar-search-pill">
+                <span class="search-orb"></span>
+                <input
+                    type="text"
+                    id="quick-search-input"
+                    class="sidebar-text"
+                    placeholder="Cerca monitor o funzione..."
+                    oninput="onQuickSearch(this.value)"
+                />
+                <kbd class="sidebar-text">⌘K</kbd>
+            </div>
+
+            <!-- Navigazione Principale -->
+            <div class="sidebar-scroll-area">
+                <div class="sidebar-section-label sidebar-text">MAIN</div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-nav="dashboard" onclick="switchMainView('dashboard')">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                        <span class="sidebar-text">Dashboard</span>
                     </button>
-                    <button class="seg-btn" data-layout="single" onclick="setLayoutMode('single')">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="4" width="18" height="16" rx="3"></rect>
-                        </svg>
-                        <span>Selettore</span>
+                    <button class="nav-item" data-nav="multi" onclick="switchMainView('multi')">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="16" rx="2"></rect><rect x="13" y="4" width="8" height="16" rx="2"></rect></svg>
+                        <span class="sidebar-text">Tutti Affiancati</span>
                     </button>
-                </div>
+                    <button class="nav-item" data-nav="color" onclick="switchMainView('color')">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="10.5" r="2.5"></circle><circle cx="8.5" cy="7.5" r="2.5"></circle><circle cx="6.5" cy="12.5" r="2.5"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg>
+                        <span class="sidebar-text">Colori & RGB</span>
+                    </button>
+                    <button class="nav-item" data-nav="io" onclick="switchMainView('io')">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                        <span class="sidebar-text">Audio & Sorgenti</span>
+                    </button>
+                </nav>
 
-                <button class="glass-pill-btn" id="sync-all-btn" onclick="toggleSyncAll()" title="Sincronizza modifiche su tutti i monitor">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 2.1l4 4-4 4"></path>
-                        <path d="M3 12.2v-2a4 4 0 0 1 4-4h12.8M7 21.9l-4-4 4-4"></path>
-                        <path d="M21 11.8v2a4 4 0 0 1-4 4H4.2"></path>
-                    </svg>
-                    <span>Sync Tutti</span>
-                </button>
+                <!-- Lista Monitor Rilevati -->
+                <div class="sidebar-section-label sidebar-text">MONITOR COLLEGATI</div>
+                <nav class="sidebar-nav" id="sidebar-monitors-list">
+                    <!-- Popolato dinamicamente -->
+                </nav>
 
-                <button class="glass-icon-btn" id="rescan-btn" onclick="triggerRescan()" title="Rileva nuovamente i monitor collegati">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-                        <path d="M3 3v5h5"></path>
-                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path>
-                        <path d="M16 16h5v5"></path>
-                    </svg>
-                </button>
-
-                <button class="glass-icon-btn" id="settings-btn" onclick="openSettingsModal()" title="Impostazioni e Aggiornamenti">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                    </svg>
-                </button>
+                <!-- Sezione Sistema -->
+                <div class="sidebar-section-label sidebar-text">SYSTEM</div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item" data-nav="settings" onclick="switchMainView('settings', 'theme')">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        <span class="sidebar-text">Impostazioni</span>
+                    </button>
+                    <button class="nav-item" data-nav="updates" onclick="switchMainView('settings', 'updates')">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                        <span class="sidebar-text">Aggiornamenti</span>
+                        <span class="nav-badge hidden" id="sidebar-update-badge">1</span>
+                    </button>
+                </nav>
             </div>
 
-            <!-- Controlli Finestra Windows -->
-            <div class="window-controls">
-                <button class="win-btn" onclick="windowAction('minimize')" title="Riduci a icona">
-                    <svg viewBox="0 0 12 12" width="11" height="11"><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                </button>
-                <button class="win-btn" onclick="windowAction('maximize')" title="Ingrandisci / Ripristina">
-                    <svg viewBox="0 0 12 12" width="11" height="11"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
-                </button>
-                <button class="win-btn win-close" onclick="windowAction('close')" title="Chiudi">
-                    <svg viewBox="0 0 12 12" width="11" height="11"><path d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                </button>
-            </div>
-        </header>
-
-        <!-- Banner Aggiornamento Disponibile (Liquid Glass) -->
-        <div class="update-banner hidden" id="update-banner">
-            <div class="update-banner-info">
-                <span class="update-sparkle">✦</span>
-                <div>
-                    <strong id="update-banner-title">Nuovo aggiornamento disponibile!</strong>
-                    <p id="update-banner-desc">È disponibile una nuova versione su GitHub Releases.</p>
+            <!-- Footer Profilo Sidebar -->
+            <div class="sidebar-footer" onclick="switchMainView('settings', 'theme')" title="Personalizza Tema e Colori">
+                <div class="footer-avatar">MM</div>
+                <div class="footer-meta sidebar-text">
+                    <strong>Controllo DDC/CI</strong>
+                    <span id="sidebar-footer-sub">Motore Rust Nativo</span>
                 </div>
             </div>
-            <div class="update-banner-actions">
-                <button class="glass-btn primary-glass-btn" id="install-update-btn" onclick="installUpdateNow()">
-                    Aggiorna e Riavvia ora
-                </button>
-                <button class="glass-icon-btn small" onclick="dismissUpdateBanner()" title="Nascondi">✕</button>
-            </div>
-        </div>
+        </aside>
 
-        <!-- Barra Selettore Monitor (visibile in modalità "single") -->
-        <nav class="monitor-switcher-bar hidden" id="monitor-switcher-bar"></nav>
-
-        <!-- Area Principale Contenuto -->
-        <main class="main-content" id="main-content">
-            <!-- Stato di Caricamento Iniziale -->
-            <div class="loading-glass-card" id="loading-state">
-                <div class="liquid-spinner"></div>
-                <h2>Rilevamento monitor collegati in corso...</h2>
-                <p>Interrogazione bus DDC/CI ed EDID hardware per ASUS, AOC, KTC e altri display</p>
-            </div>
-
-            <!-- Griglia / Contenitore Schede Monitor -->
-            <div class="monitors-container hidden" id="monitors-container"></div>
-        </main>
-    </div>
-
-    <!-- Modale Impostazioni (Apple iOS 26 Liquid Glass Sheet) -->
-    <div class="modal-backdrop hidden" id="settings-modal" onclick="handleBackdropClick(event)">
-        <div class="glass-modal-sheet">
-            <div class="modal-header">
-                <div>
-                    <h2>Impostazioni</h2>
-                    <p class="modal-subtitle">Personalizza l'esperienza Liquid Glass e gli aggiornamenti</p>
-                </div>
-                <button class="glass-icon-btn" onclick="closeSettingsModal()">✕</button>
-            </div>
-
-            <div class="modal-body">
-                <!-- Sezione Tema -->
-                <div class="settings-group">
-                    <div class="settings-row">
-                        <div class="settings-label">
-                            <strong>Tema dell'Interfaccia</strong>
-                            <span>Scegli tra vetro chiaro cristallino, vetro scuro fumé o automatico di Windows</span>
-                        </div>
-                        <div class="segmented-glass" id="theme-segmented">
-                            <button class="seg-btn" data-theme-opt="light" onclick="setThemePreference('light')">Chiaro</button>
-                            <button class="seg-btn" data-theme-opt="dark" onclick="setThemePreference('dark')">Scuro</button>
-                            <button class="seg-btn active" data-theme-opt="system" onclick="setThemePreference('system')">Sistema</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-row">
-                        <div class="settings-label">
-                            <strong>Modalità Visualizzazione Monitor</strong>
-                            <span>Mostra tutti i monitor affiancati oppure usa il selettore superiore</span>
-                        </div>
-                        <div class="segmented-glass" id="modal-layout-segmented">
-                            <button class="seg-btn active" data-layout-opt="multi" onclick="setLayoutMode('multi')">Schede Affiancate</button>
-                            <button class="seg-btn" data-layout-opt="single" onclick="setLayoutMode('single')">Selettore Singolo</button>
-                        </div>
-                    </div>
+        <!-- 2. PANNELLO PRINCIPALE CONTENUTI (GLASS MAIN BOARD) -->
+        <section class="glass-main-board">
+            <!-- Header Superiore con Trascinamento Finestra -->
+            <header class="board-topbar" id="titlebar-drag">
+                <div class="greeting-block">
+                    <h1 id="topbar-greeting">Buon pomeriggio, Monitor Studio</h1>
+                    <p id="topbar-subtitle">Rilevamento hardware DDC/CI ed EDID in corso...</p>
                 </div>
 
-                <!-- Sezione Controlli & Comportamento -->
-                <div class="settings-group">
-                    <div class="settings-row">
-                        <div class="settings-label">
-                            <strong>Nascondi controlli non supportati</strong>
-                            <span>Nasconde automaticamente gli slider per i codici VCP non esposti dal firmware del monitor</span>
-                        </div>
-                        <label class="ios-switch">
-                            <input type="checkbox" id="toggle-hide-unsupported" onchange="updateBoolSetting('hide_unsupported', this.checked)" />
-                            <span class="ios-slider"></span>
-                        </label>
-                    </div>
+                <div class="topbar-actions">
+                    <button class="pill-btn light-pill-btn" id="rescan-btn" onclick="triggerRescan()" title="Scansiona nuovamente i monitor collegati">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2">
+                            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                            <path d="M3 3v5h5"></path>
+                            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path>
+                            <path d="M16 16h5v5"></path>
+                        </svg>
+                        <span>Rileva Monitor</span>
+                    </button>
 
-                    <div class="settings-row">
-                        <div class="settings-label">
-                            <strong>Riduci nella System Tray alla chiusura</strong>
-                            <span>Mantiene Monitor Manager attivo vicino all'orologio di Windows quando premi la X</span>
-                        </div>
-                        <label class="ios-switch">
-                            <input type="checkbox" id="toggle-close-to-tray" onchange="updateBoolSetting('close_to_tray', this.checked)" checked />
-                            <span class="ios-slider"></span>
-                        </label>
-                    </div>
+                    <button class="pill-btn dark-pill-btn" id="sync-all-btn" onclick="toggleSyncAll()" title="Sincronizza le regolazioni su tutti i monitor collegati">
+                        <span>+ Sync Tutti i Monitor</span>
+                    </button>
 
-                    <div class="settings-row">
-                        <div class="settings-label">
-                            <strong>Avvia automaticamente con Windows</strong>
-                            <span>Avvia l'app in background all'accensione del PC</span>
-                        </div>
-                        <label class="ios-switch">
-                            <input type="checkbox" id="toggle-autostart" onchange="updateBoolSetting('start_with_windows', this.checked)" />
-                            <span class="ios-slider"></span>
-                        </label>
+                    <div class="window-controls">
+                        <button class="win-btn" onclick="windowAction('minimize')" title="Riduci a icona">
+                            <svg viewBox="0 0 12 12" width="11" height="11"><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        </button>
+                        <button class="win-btn" onclick="windowAction('maximize')" title="Ingrandisci / Ripristina">
+                            <svg viewBox="0 0 12 12" width="11" height="11"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+                        </button>
+                        <button class="win-btn win-close" onclick="windowAction('close')" title="Chiudi">
+                            <svg viewBox="0 0 12 12" width="11" height="11"><path d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        </button>
                     </div>
                 </div>
+            </header>
 
-                <!-- Sezione Aggiornamenti GitHub -->
-                <div class="settings-group">
-                    <div class="settings-row">
-                        <div class="settings-label">
-                            <strong>Controllo automatico aggiornamenti all'avvio</strong>
-                            <span>Verifica nuove release su <code>github.com/riccardo-bettini/Monitor-Manager</code></span>
-                        </div>
-                        <label class="ios-switch">
-                            <input type="checkbox" id="toggle-auto-updates" onchange="updateBoolSetting('auto_check_updates', this.checked)" checked />
-                            <span class="ios-slider"></span>
-                        </label>
+            <!-- Banner Aggiornamento Disponibile -->
+            <div class="update-banner hidden" id="update-banner">
+                <div class="update-banner-info">
+                    <span class="update-sparkle">✦</span>
+                    <div>
+                        <strong id="update-banner-title">Nuova versione disponibile!</strong>
+                        <p id="update-banner-desc">È pronta una nuova release su GitHub.</p>
                     </div>
-
-                    <div class="settings-row update-check-row">
-                        <div class="settings-label">
-                            <strong>Versione Installata: <span id="settings-current-ver">v1.00</span></strong>
-                            <span id="update-status-text">Canale Release GitHub ufficiale</span>
-                        </div>
-                        <div class="update-actions-wrap">
-                            <button class="glass-btn" id="manual-check-btn" onclick="checkUpdatesManual()">
-                                Verifica aggiornamenti
-                            </button>
-                            <button class="glass-btn primary-glass-btn hidden" id="modal-install-btn" onclick="installUpdateNow()">
-                                Installa Ora
-                            </button>
-                        </div>
-                    </div>
+                </div>
+                <div class="update-banner-actions">
+                    <button class="pill-btn light-pill-btn" id="install-update-btn" onclick="installUpdateNow()">
+                        Aggiorna e Riavvia ora
+                    </button>
+                    <button class="win-btn" onclick="dismissUpdateBanner()">✕</button>
                 </div>
             </div>
 
-            <div class="modal-footer">
-                <button class="glass-btn danger-glass-btn" onclick="windowAction('quit')">
-                    Chiudi completamente l'app
-                </button>
-                <button class="glass-btn primary-glass-btn" onclick="closeSettingsModal()">
-                    Fatto
-                </button>
+            <!-- Area Scrollabile della Board -->
+            <div class="board-scroll-content" id="board-scroll-content">
+                <!-- Stato Caricamento Iniziale -->
+                <div class="loading-glass-state" id="loading-state">
+                    <div class="liquid-spinner"></div>
+                    <h2>Connessione ai monitor in corso...</h2>
+                    <p>Lettura parametri hardware VCP ed EDID su bus DDC/CI</p>
+                </div>
+
+                <!-- VISTA 1: DASHBOARD PRINCIPALE (Hero Card + Side Widget + 4 Stat Cards + Quick Pills + Controlli) -->
+                <div class="dashboard-view hidden" id="view-dashboard"></div>
+
+                <!-- VISTA 2: TUTTI I MONITOR AFFIANCATI -->
+                <div class="multi-monitors-view hidden" id="view-multi"></div>
+
+                <!-- VISTA 3: IMPOSTAZIONI INTEGRATE E DIVISE IN CATEGORIE -->
+                <div class="settings-integrated-view hidden" id="view-settings">
+                    <!-- Barra Categorie Impostazioni -->
+                    <div class="settings-categories-bar">
+                        <button class="settings-cat-tab active" data-scat="theme" onclick="switchSettingsCategory('theme')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a7 7 0 1 0 10 10"></path></svg>
+                            <span>Tema e Colori</span>
+                        </button>
+                        <button class="settings-cat-tab" data-scat="display" onclick="switchSettingsCategory('display')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                            <span>Visualizzazione e Controlli</span>
+                        </button>
+                        <button class="settings-cat-tab" data-scat="system" onclick="switchSettingsCategory('system')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M6 8h.01M10 8h.01M14 8h.01"></path></svg>
+                            <span>Sistema e Avvio</span>
+                        </button>
+                        <button class="settings-cat-tab" data-scat="updates" onclick="switchSettingsCategory('updates')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span>Aggiornamenti GitHub</span>
+                        </button>
+                    </div>
+
+                    <!-- PANNELLO CATEGORIA 1: TEMA E COLORI -->
+                    <div class="settings-cat-panel" id="scat-panel-theme">
+                        <div class="settings-glass-card">
+                            <div class="settings-card-head">
+                                <h3>Modalità Aspetto</h3>
+                                <p>Scegli il tema del vetro liquido o sincronizzalo in automatico con Windows</p>
+                            </div>
+                            <div class="theme-mode-cards">
+                                <button class="theme-mode-option" data-theme-opt="light" onclick="setThemePreference('light')">
+                                    <div class="theme-preview preview-light"></div>
+                                    <strong>Chiaro Cristallo</strong>
+                                    <span>Vetro satinato luminoso</span>
+                                </button>
+                                <button class="theme-mode-option" data-theme-opt="dark" onclick="setThemePreference('dark')">
+                                    <div class="theme-preview preview-dark"></div>
+                                    <strong>Scuro Fumé</strong>
+                                    <span>Vetro caldo profondo</span>
+                                </button>
+                                <button class="theme-mode-option active" data-theme-opt="system" onclick="setThemePreference('system')">
+                                    <div class="theme-preview preview-system"></div>
+                                    <strong>Sistema (Auto)</strong>
+                                    <span>Segue il tema di Windows</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="settings-glass-card">
+                            <div class="settings-card-head">
+                                <h3>Palette Colore & Stile Hero Card</h3>
+                                <p>Personalizza la tonalità della Hero Card, dei controlli attivi e dei riflessi sullo sfondo</p>
+                            </div>
+                            <div class="palette-swatches-grid">
+                                <button class="palette-swatch-card active" data-palette-opt="coral" onclick="setAccentPalette('coral')">
+                                    <span class="swatch-circle swatch-coral"></span>
+                                    <div>
+                                        <strong>Coral Sunset</strong>
+                                        <span>Stile Glassy V24</span>
+                                    </div>
+                                </button>
+                                <button class="palette-swatch-card" data-palette-opt="cyan" onclick="setAccentPalette('cyan')">
+                                    <span class="swatch-circle swatch-cyan"></span>
+                                    <div>
+                                        <strong>Ocean Cyan</strong>
+                                        <span>Azzurro & Indaco</span>
+                                    </div>
+                                </button>
+                                <button class="palette-swatch-card" data-palette-opt="emerald" onclick="setAccentPalette('emerald')">
+                                    <span class="swatch-circle swatch-emerald"></span>
+                                    <div>
+                                        <strong>Emerald Mint</strong>
+                                        <span>Smeraldo & Acqua</span>
+                                    </div>
+                                </button>
+                                <button class="palette-swatch-card" data-palette-opt="purple" onclick="setAccentPalette('purple')">
+                                    <span class="swatch-circle swatch-purple"></span>
+                                    <div>
+                                        <strong>Royal Aurora</strong>
+                                        <span>Viola & Magenta</span>
+                                    </div>
+                                </button>
+                                <button class="palette-swatch-card" data-palette-opt="amber" onclick="setAccentPalette('amber')">
+                                    <span class="swatch-circle swatch-amber"></span>
+                                    <div>
+                                        <strong>Amber Gold</strong>
+                                        <span>Ambra & Bronzo</span>
+                                    </div>
+                                </button>
+                                <div class="palette-swatch-card custom-color-card" data-palette-opt="custom" onclick="document.getElementById('custom-color-input').click()">
+                                    <input
+                                        type="color"
+                                        id="custom-color-input"
+                                        value="#e15b48"
+                                        oninput="setCustomAccentHex(this.value)"
+                                    />
+                                    <div>
+                                        <strong>Personalizzato</strong>
+                                        <span id="custom-hex-label">#E15B48</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-glass-card">
+                            <div class="settings-card-head">
+                                <h3>Effetti Vetro Satinato & Sfondo</h3>
+                                <p>Regola la profondità della sfocatura Liquid Glass e le macchie di colore fluttuanti</p>
+                            </div>
+
+                            <div class="settings-slider-item">
+                                <div class="settings-row-top">
+                                    <strong>Intensità Sfocatura Vetro (Backdrop Blur)</strong>
+                                    <span class="vcp-value-badge" id="blur-val-badge">44 px</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    class="liquid-slider"
+                                    id="slider-glass-blur"
+                                    min="16"
+                                    max="64"
+                                    value="44"
+                                    oninput="updateVisualSlider('glass_blur', this.value)"
+                                />
+                            </div>
+
+                            <div class="settings-slider-item">
+                                <div class="settings-row-top">
+                                    <strong>Intensità Macchie di Colore Fluttuanti</strong>
+                                    <span class="vcp-value-badge" id="blob-val-badge">85%</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    class="liquid-slider"
+                                    id="slider-blob-intensity"
+                                    min="0"
+                                    max="100"
+                                    value="85"
+                                    oninput="updateVisualSlider('blob_intensity', this.value)"
+                                />
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <strong>Animazione Fluttuante Sfondo</strong>
+                                    <span>Muove dolcemente le macchie di colore dietro i pannelli in vetro</span>
+                                </div>
+                                <label class="ios-switch">
+                                    <input type="checkbox" id="toggle-animate-blobs" onchange="updateBoolSetting('animate_blobs', this.checked)" checked />
+                                    <span class="ios-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PANNELLO CATEGORIA 2: VISUALIZZAZIONE E CONTROLLI -->
+                    <div class="settings-cat-panel hidden" id="scat-panel-display">
+                        <div class="settings-glass-card">
+                            <div class="settings-card-head">
+                                <h3>Layout e Controlli Monitor</h3>
+                                <p>Configura come vengono presentati i monitor e i parametri hardware VCP</p>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <strong>Vista Predefinita all'Apertura</strong>
+                                    <span>Scegli se aprire la Dashboard Singolo Monitor o la griglia Tutti Affiancati</span>
+                                </div>
+                                <div class="segmented-glass" id="modal-layout-segmented">
+                                    <button class="seg-btn active" data-layout-opt="single" onclick="setLayoutMode('single')">Dashboard Singola</button>
+                                    <button class="seg-btn" data-layout-opt="multi" onclick="setLayoutMode('multi')">Tutti Affiancati</button>
+                                </div>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <strong>Sincronizza tutti i monitor collegati</strong>
+                                    <span>Applica contemporaneamente luminosità, contrasto e colore a tutti gli schermi</span>
+                                </div>
+                                <label class="ios-switch">
+                                    <input type="checkbox" id="toggle-sync-monitors" onchange="updateBoolSetting('sync_monitors', this.checked)" />
+                                    <span class="ios-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <strong>Nascondi controlli non supportati dal monitor</strong>
+                                    <span>Nasconde automaticamente i parametri VCP non esposti dal firmware del display</span>
+                                </div>
+                                <label class="ios-switch">
+                                    <input type="checkbox" id="toggle-hide-unsupported" onchange="updateBoolSetting('hide_unsupported', this.checked)" />
+                                    <span class="ios-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PANNELLO CATEGORIA 3: SISTEMA E AVVIO -->
+                    <div class="settings-cat-panel hidden" id="scat-panel-system">
+                        <div class="settings-glass-card">
+                            <div class="settings-card-head">
+                                <h3>Integrazione con Windows</h3>
+                                <p>Gestisci il comportamento in background nella System Tray e l'avvio automatico</p>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <strong>Riduci nella System Tray alla chiusura (X)</strong>
+                                    <span>Mantiene Monitor Manager attivo vicino all'orologio di Windows senza occupare la barra applicazioni</span>
+                                </div>
+                                <label class="ios-switch">
+                                    <input type="checkbox" id="toggle-close-to-tray" onchange="updateBoolSetting('close_to_tray', this.checked)" checked />
+                                    <span class="ios-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <strong>Avvia automaticamente con Windows</strong>
+                                    <span>Lancia Monitor Manager ridotto nella System Tray all'accensione del PC</span>
+                                </div>
+                                <label class="ios-switch">
+                                    <input type="checkbox" id="toggle-autostart" onchange="updateBoolSetting('start_with_windows', this.checked)" />
+                                    <span class="ios-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <strong>Termina Sessione Applicazione</strong>
+                                    <span>Chiude completamente il processo di Monitor Manager anche dalla System Tray</span>
+                                </div>
+                                <button class="pill-btn danger-pill-btn" onclick="windowAction('quit')">
+                                    Chiudi completamente l'app
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PANNELLO CATEGORIA 4: AGGIORNAMENTI GITHUB -->
+                    <div class="settings-cat-panel hidden" id="scat-panel-updates">
+                        <div class="settings-glass-card">
+                            <div class="settings-card-head">
+                                <h3>Aggiornamenti Software (GitHub Releases)</h3>
+                                <p>Collegato a <code>github.com/riccardo-bettini/Monitor-Manager</code></p>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <strong>Controllo automatico aggiornamenti all'avvio</strong>
+                                    <span>Verifica silenziosamente in background se è uscita una nuova versione</span>
+                                </div>
+                                <label class="ios-switch">
+                                    <input type="checkbox" id="toggle-auto-updates" onchange="updateBoolSetting('auto_check_updates', this.checked)" checked />
+                                    <span class="ios-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <strong>Versione Attuale: <span id="settings-current-ver">v1.01</span></strong>
+                                    <span id="update-status-text">Canale ufficiale GitHub Releases attivo</span>
+                                </div>
+                                <div class="update-actions-wrap">
+                                    <button class="pill-btn light-pill-btn" id="manual-check-btn" onclick="checkUpdatesManual()">
+                                        Verifica aggiornamenti ora
+                                    </button>
+                                    <button class="pill-btn dark-pill-btn hidden" id="modal-install-btn" onclick="installUpdateNow()">
+                                        Installa e Riavvia
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
+        </section>
     </div>
 
     <script>/*__INLINE_JS__*/</script>

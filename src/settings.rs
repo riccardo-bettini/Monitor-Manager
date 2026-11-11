@@ -3,34 +3,83 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+fn default_theme() -> String {
+    "system".to_string()
+}
+fn default_layout_mode() -> String {
+    "single".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_accent_palette() -> String {
+    "coral".to_string()
+}
+fn default_custom_accent_hex() -> String {
+    "#e15b48".to_string()
+}
+fn default_glass_blur() -> u32 {
+    44
+}
+fn default_blob_intensity() -> u32 {
+    85
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     /// "system" | "dark" | "light"
+    #[serde(default = "default_theme")]
     pub theme: String,
-    /// "multi" (Schede Affiancate) | "single" (Selettore Superiore)
+    /// "single" (Dashboard Monitor Singolo) | "multi" (Schede Affiancate)
+    #[serde(default = "default_layout_mode")]
     pub layout_mode: String,
     /// Nasconde gli slider per i codici VCP non supportati dal singolo monitor
+    #[serde(default)]
     pub hide_unsupported: bool,
     /// Sincronizza le modifiche su tutti i monitor collegati
+    #[serde(default)]
     pub sync_monitors: bool,
     /// Avvia automaticamente Monitor Manager all'avvio di Windows
+    #[serde(default)]
     pub start_with_windows: bool,
     /// Controlla automaticamente gli aggiornamenti su GitHub all'apertura
+    #[serde(default = "default_true")]
     pub auto_check_updates: bool,
     /// Minimizza nella System Tray invece di chiudere quando si preme la X
+    #[serde(default = "default_true")]
     pub close_to_tray: bool,
+    /// Palette colore accento e Hero Card: "coral" | "cyan" | "emerald" | "purple" | "amber" | "custom"
+    #[serde(default = "default_accent_palette")]
+    pub accent_palette: String,
+    /// Colore esadecimale scelto dall'utente quando accent_palette == "custom"
+    #[serde(default = "default_custom_accent_hex")]
+    pub custom_accent_hex: String,
+    /// Intensità sfocatura vetro (backdrop-filter blur in px, 16..=64)
+    #[serde(default = "default_glass_blur")]
+    pub glass_blur: u32,
+    /// Opacità / intensità delle macchie di colore fluttuanti sullo sfondo (0..=100)
+    #[serde(default = "default_blob_intensity")]
+    pub blob_intensity: u32,
+    /// Attiva/disattiva il movimento fluttuante delle macchie di colore sullo sfondo
+    #[serde(default = "default_true")]
+    pub animate_blobs: bool,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            theme: "system".to_string(),
-            layout_mode: "multi".to_string(),
+            theme: default_theme(),
+            layout_mode: default_layout_mode(),
             hide_unsupported: false,
             sync_monitors: false,
             start_with_windows: false,
             auto_check_updates: true,
             close_to_tray: true,
+            accent_palette: default_accent_palette(),
+            custom_accent_hex: default_custom_accent_hex(),
+            glass_blur: default_glass_blur(),
+            blob_intensity: default_blob_intensity(),
+            animate_blobs: true,
         }
     }
 }
