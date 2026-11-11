@@ -233,7 +233,7 @@ fn main() {
 
     let _tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
-        .with_tooltip("Monitor Manager v1.04 (Dark Matte Titanium)")
+        .with_tooltip(format!("Monitor Manager v{} (Dark Matte Titanium)", APP_VERSION))
         .with_icon(tray_icon_data)
         .build()
         .ok();

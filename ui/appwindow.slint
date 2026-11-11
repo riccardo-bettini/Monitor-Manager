@@ -388,10 +388,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.04";
-    in-out property <string> update-status-text: "Monitor Manager v1.04 (Dark Matte Titanium)";
+    in-out property <string> app-version: "1.05";
+    in-out property <string> update-status-text: "Monitor Manager v1.05 (Dark Matte Titanium)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.04";
+    in-out property <string> latest-version: "1.05";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -1934,10 +1934,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.04 (DARK MATTE TITANIUM)
+// FINESTRA INSTALLER SETUP v1.05 (DARK MATTE TITANIUM)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.04";
+    title: "Installazione Monitor Manager v1.05";
     preferred-width: 520px;
     preferred-height: 410px;
     background: #171a21;
@@ -1948,7 +1948,7 @@ export component SetupWindow inherits Window {
     in-out property <bool> opt-launch: true;
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.04 (Dark Matte Titanium)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.05 (Dark Matte Titanium)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -1972,7 +1972,7 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.04";
+                        text: "Monitor Manager v1.05";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
@@ -2059,7 +2059,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione..." : "Installa v1.04 Ora";
+                    text: root.installing ? "Installazione..." : "Installa v1.05 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;

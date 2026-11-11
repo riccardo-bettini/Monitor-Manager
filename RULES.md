@@ -17,12 +17,14 @@ Questo file definisce le regole operative, il ciclo di vita delle versioni e le 
 ---
 
 ## 2. Politica di Pubblicazione & Release
-- **Controllo Totale dell'Utente**: **NESSUNA** release su GitHub deve mai essere creata o pubblicata in autonomia dall'agente/assistente.
-- **Autorizzazione Esplicita**: La creazione di tag Git e la pubblicazione di una nuova release avverrà **esclusivamente su comando esplicito dell'utente**.
+- **Pubblicazione Automatica a Ogni Modifica**: Salvo indicazioni diverse dell'utente, **OGNI SINGOLA MODIFICA** (bugfix, miglioramento, nuova feature) approvata o implementata nell'applicazione comporta automaticamente l'incremento di versione (`+0.01`) e la pubblicazione immediata della nuova release su GitHub.
 - **Canale di Distribuzione Ufficiale**:
-  - Ogni aggiornamento approvato deve essere caricato come **GitHub Release** nella repository ufficiale:
+  - Ogni aggiornamento deve essere caricato come **GitHub Release** nella repository ufficiale:
     `https://github.com/riccardo-bettini/Monitor-Manager`
-  - Ogni release deve contenere l'eseguibile compilato per Windows (es. `.exe` o archivio `.zip` compresso) e un sintetico changelog delle novità/fix.
+  - Ogni release deve tassativamente contenere **entrambi** i seguenti file:
+    1. `Monitor-Manager-Setup-vX.XX.exe` (l'installer completo per nuove installazioni o download manuale).
+    2. `monitor-manager.exe` (l'eseguibile nativo puro per l'auto-updater in-app silenzioso a 0 click).
+  - Un sintetico changelog delle novità/fix nelle note di rilascio.
 
 ---
 

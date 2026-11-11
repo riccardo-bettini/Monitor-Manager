@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::process::Command;
 
-pub const APP_VERSION: &str = "1.04";
+pub const APP_VERSION: &str = "1.05";
 pub const GITHUB_REPO: &str = "riccardo-bettini/Monitor-Manager";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,14 +154,13 @@ pub fn check_for_updates() -> UpdateCheckResult {
     }
 }
 
-/// Scarica il nuovo eseguibile da GitHub Releases, sostituisce il binario attuale e riavvia l'app
+/// Scarica il nuovo eseguibile o installer da GitHub Releases, sostituisce il binario o avvia il setup ed esce in sicurezza
 pub fn perform_self_update(download_url: &str) -> Result<(), String> {
     let current_exe = env::current_exe().map_err(|e| format!("Percorso exe non trovato: {}", e))?;
-    let temp_exe = current_exe.with_extension("new.exe");
-    let old_exe = current_exe.with_extension("old.exe");
+    let is_setup = download_url.to_lowercase().contains("setup");
 
     let resp = ureq::get(download_url)
-        .set("User-Agent", "Monitor-Manager-Updater/1.00")
+        .set("User-Agent", "Monitor-Manager-Updater/1.05")
         .call()
         .map_err(|e| format!("Errore download aggiornamento: {}", e))?;
 
@@ -174,22 +173,36 @@ pub fn perform_self_update(download_url: &str) -> Result<(), String> {
         return Err("Il file scaricato non sembra un eseguibile valido.".to_string());
     }
 
-    fs::write(&temp_exe, &bytes).map_err(|e| format!("Errore scrittura nuovo exe: {}", e))?;
+    if is_setup {
+        // Se l'asset scaricato è un installer setup, lo salviamo in %TEMP% con nome dedicato
+        let temp_setup = env::temp_dir().join(format!("Monitor-Manager-Setup-v{}.exe", APP_VERSION));
+        fs::write(&temp_setup, &bytes).map_err(|e| format!("Errore scrittura installer temporaneo: {}", e))?;
 
-    if old_exe.exists() {
-        let _ = fs::remove_file(&old_exe);
+        // Avviamo l'installer e terminiamo l'istanza corrente dell'app così che i file possano essere sostituiti
+        let _ = Command::new(&temp_setup).spawn();
+        std::process::exit(0);
+    } else {
+        // Aggiornamento diretto in-place dell'eseguibile standalone
+        let temp_exe = current_exe.with_extension("new.exe");
+        let old_exe = current_exe.with_extension("old.exe");
+
+        fs::write(&temp_exe, &bytes).map_err(|e| format!("Errore scrittura nuovo exe: {}", e))?;
+
+        if old_exe.exists() {
+            let _ = fs::remove_file(&old_exe);
+        }
+
+        fs::rename(&current_exe, &old_exe)
+            .map_err(|e| format!("Impossibile rinominare l'eseguibile in uso: {}", e))?;
+
+        if let Err(e) = fs::rename(&temp_exe, &current_exe) {
+            // Rollback in caso di errore imprevisto
+            let _ = fs::rename(&old_exe, &current_exe);
+            return Err(format!("Impossibile attivare il nuovo eseguibile: {}", e));
+        }
+
+        // Avvia la nuova versione e termina l'istanza corrente
+        let _ = Command::new(&current_exe).spawn();
+        std::process::exit(0);
     }
-
-    fs::rename(&current_exe, &old_exe)
-        .map_err(|e| format!("Impossibile rinominare l'eseguibile in uso: {}", e))?;
-
-    if let Err(e) = fs::rename(&temp_exe, &current_exe) {
-        // Rollback in caso di errore imprevisto
-        let _ = fs::rename(&old_exe, &current_exe);
-        return Err(format!("Impossibile attivare il nuovo eseguibile: {}", e));
-    }
-
-    // Avvia la nuova versione e termina l'istanza corrente
-    let _ = Command::new(&current_exe).spawn();
-    std::process::exit(0);
 }

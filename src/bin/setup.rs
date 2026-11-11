@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 
-const APP_VERSION: &str = "1.04";
+const APP_VERSION: &str = "1.05";
 const APP_NAME: &str = "Monitor Manager";
 const PAYLOAD_EXE: &[u8] = include_bytes!("../../target/release/monitor-manager.exe");
 
@@ -224,9 +224,15 @@ fn register_uninstaller_and_autostart(
 }
 
 fn perform_installation(options: &InstallOptions) -> Result<PathBuf, String> {
+    // Termina altre istanze in esecuzione dell'app, escludendo rigorosamente il processo dell'installer corrente
+    let my_pid = std::process::id();
+    let filter = format!("PID ne {}", my_pid);
     let _ = Command::new("taskkill")
-        .args(["/F", "/IM", "monitor-manager.exe"])
+        .args(["/F", "/FI", &filter, "/IM", "monitor-manager.exe"])
         .output();
+
+    // Breve pausa per assicurarsi che i file handle siano stati rilasciati da Windows
+    thread::sleep(std::time::Duration::from_millis(300));
 
     let install_dir = get_install_dir();
     fs::create_dir_all(&install_dir)
@@ -292,7 +298,7 @@ fn main() {
         if let Some(u) = uw.upgrade() {
             u.set_installing(true);
             u.set_status_text(SharedString::from(
-                "Installazione di Monitor Manager v1.03 in corso...",
+                format!("Installazione di Monitor Manager v{} in corso...", APP_VERSION).as_str(),
             ));
             let opts = InstallOptions {
                 desktop_shortcut: u.get_opt_desktop(),
@@ -307,7 +313,7 @@ fn main() {
                             u.set_installing(false);
                             u.set_installed(true);
                             u.set_status_text(SharedString::from(
-                                "✓ Monitor Manager v1.03 installato con successo!",
+                                format!("✓ Monitor Manager v{} installato con successo!", APP_VERSION).as_str(),
                             ));
                         }
                     });
