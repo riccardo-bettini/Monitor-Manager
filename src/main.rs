@@ -36,6 +36,47 @@ fn trim_process_working_set() {
     }
 }
 
+/// Applica gli angoli arrotondati standard Windows 11 (DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND)
+/// e il drop-shadow nativo alla finestra dell'app borderless.
+fn apply_windows_rounded_corners() {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+    };
+
+    let my_pid = std::process::id();
+
+    unsafe extern "system" fn find_hwnd_cb(hwnd: HWND, lparam: isize) -> i32 {
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        let my_pid = *(lparam as *const u32);
+        if pid == my_pid && IsWindowVisible(hwnd) != 0 {
+            // Salva l'HWND nel puntatore passato come secondo u32 o campo
+            let target_ptr = (lparam as *mut usize).add(1) as *mut HWND;
+            *target_ptr = hwnd;
+            return 0; // trovato, interrompe enumerazione
+        }
+        1
+    }
+
+    let mut state: [usize; 2] = [my_pid as usize, 0];
+    unsafe {
+        EnumWindows(Some(find_hwnd_cb), state.as_mut_ptr() as isize);
+        let found_hwnd = state[1] as HWND;
+        if !found_hwnd.is_null() {
+            // DWMWCP_ROUND = 2 (arrotondamento standard Windows 11)
+            let preference: u32 = 2;
+            let _ = DwmSetWindowAttribute(
+                found_hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+                &preference as *const _ as *const _,
+                std::mem::size_of::<u32>() as u32,
+            );
+        }
+    }
+}
+
 fn generate_app_icon_rgba() -> (Vec<u8>, u32, u32) {
     let w = 32u32;
     let h = 32u32;
@@ -248,6 +289,7 @@ fn main() {
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(u) = uw.upgrade() {
                     let _ = u.show();
+                    apply_windows_rounded_corners();
                 }
             });
         } else if event.id == rescan_id {
@@ -284,6 +326,7 @@ fn main() {
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(u) = uw.upgrade() {
                     let _ = u.show();
+                    apply_windows_rounded_corners();
                 }
             });
         }
@@ -333,10 +376,11 @@ fn main() {
             } else {
                 u.window().set_maximized(false);
                 u.set_window_maximized(false);
-                let (w, h) = last_ws_clone.lock().unwrap().unwrap_or((980, 620));
+                let (w, h) = last_ws_clone.lock().unwrap().unwrap_or((980, 600));
                 let w = w.max(860);
                 let h = h.max(540);
                 u.window().set_size(slint::PhysicalSize::new(w, h));
+                apply_windows_rounded_corners();
             }
         }
     });
@@ -574,6 +618,11 @@ fn main() {
 
     if !start_minimized {
         let _ = ui.show();
+        apply_windows_rounded_corners();
+        thread::spawn(|| {
+            thread::sleep(std::time::Duration::from_millis(80));
+            apply_windows_rounded_corners();
+        });
     } else {
         trim_process_working_set();
     }

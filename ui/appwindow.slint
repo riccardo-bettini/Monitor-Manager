@@ -150,18 +150,18 @@ component ArcGauge inherits Rectangle {
         y: (parent.height - self.height) / 2;
     }
 
-    // Traccia scura e arco di avanzamento a 70 segmenti sovrapposti continui (passo 3.7°, raggio 47px)
-    for step[idx] in 70 : Rectangle {
-        property <angle> ang: -220deg + idx * 3.768deg;
-        property <length> rad: 47px;
-        property <bool> active: (idx * 100 / 69) <= root.percentage;
+    // Traccia scura e arco di avanzamento a 120 segmenti sovrapposti ad altissima definizione (sweep 260°, raggio 46px)
+    for step[idx] in 120 : Rectangle {
+        property <angle> ang: -220deg + idx * 2.1848deg;
+        property <length> rad: 46px;
+        property <bool> active: (idx * 100 / 119) <= root.percentage;
 
-        width: 7.5px;
-        height: 7.5px;
-        border-radius: 3.75px;
-        x: 62px + Math.cos(self.ang) * self.rad - 3.75px;
-        y: 62px + Math.sin(self.ang) * self.rad - 3.75px;
-        background: self.active ? root.accent : #262c38;
+        width: 7px;
+        height: 7px;
+        border-radius: 3.5px;
+        x: 62px + Math.cos(self.ang) * self.rad - 3.5px;
+        y: 62px + Math.sin(self.ang) * self.rad - 3.5px;
+        background: self.active ? root.accent : #282d38;
     }
 
     // Testo centrale percentuale + dicitura nitida come nel mockup
@@ -313,10 +313,10 @@ export component AppWindow inherits Window {
     title: "Monitor Manager";
     no-frame: true;
     preferred-width: 980px;
-    preferred-height: 620px;
+    preferred-height: 600px;
     min-width: 860px;
     min-height: 540px;
-    background: #171a21;
+    background: transparent;
 
     // --- Proprietà di Stato Principali ---
     in-out property <[UiMonitor]> monitors: [
@@ -400,10 +400,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.07";
-    in-out property <string> update-status-text: "Monitor Manager v1.07 (Dark Matte Titanium)";
+    in-out property <string> app-version: "1.08";
+    in-out property <string> update-status-text: "Monitor Manager v1.08 (Dark Matte Titanium)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.07";
+    in-out property <string> latest-version: "1.08";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -459,12 +459,14 @@ export component AppWindow inherits Window {
         root.current-monitor.input-source == 18 ? "HDMI 2" :
         root.current-monitor.input-source == 27 ? "USB-C" : "DisplayPort 1";
 
-    // Contenitore principale con bordo sottile Dark Matte Titanium
-    Rectangle {
+    // Contenitore principale con angoli arrotondati standard Windows
+    main-container := Rectangle {
         width: 100%;
         height: 100%;
+        border-radius: root.window-maximized ? 0px : 12px;
+        clip: true;
         background: #171a21;
-        border-width: 1px;
+        border-width: root.window-maximized ? 0px : 1px;
         border-color: #2c313d;
 
         HorizontalLayout {
@@ -966,93 +968,30 @@ export component AppWindow inherits Window {
                                 background: transparent;
 
                                 HorizontalLayout {
-                                    alignment: space-between;
-                                    padding-right: 14px;
-
-                                    HorizontalLayout {
-                                        spacing: 10px;
-                                        alignment: start;
-                                        if root.update-available : Rectangle {
-                                            height: 22px;
-                                            y: (parent.height - self.height) / 2;
-                                            border-radius: 5px;
-                                            background: root.accent-main.with-alpha(0.22);
-                                            border-width: 1px;
-                                            border-color: root.accent-main;
-                                            HorizontalLayout {
-                                                padding-left: 8px;
-                                                padding-right: 8px;
-                                                Text {
-                                                    text: root.is-en
-                                                        ? "✦ Update v\{root.latest-version} ready"
-                                                        : "✦ Aggiornamento v\{root.latest-version} pronto";
-                                                    color: #ffffff;
-                                                    font-size: 11px;
-                                                    font-weight: 600;
-                                                    vertical-alignment: center;
-                                                }
-                                            }
-                                            TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => { root.install-update(); }
+                                    alignment: start;
+                                    if root.update-available : Rectangle {
+                                        height: 22px;
+                                        y: (parent.height - self.height) / 2;
+                                        border-radius: 5px;
+                                        background: root.accent-main.with-alpha(0.22);
+                                        border-width: 1px;
+                                        border-color: root.accent-main;
+                                        HorizontalLayout {
+                                            padding-left: 8px;
+                                            padding-right: 8px;
+                                            Text {
+                                                text: root.is-en
+                                                    ? "✦ Update v\{root.latest-version} ready"
+                                                    : "✦ Aggiornamento v\{root.latest-version} pronto";
+                                                color: #ffffff;
+                                                font-size: 11px;
+                                                font-weight: 600;
+                                                vertical-alignment: center;
                                             }
                                         }
-                                    }
-
-                                    // Azioni rapide discrete (Sync + Rescan)
-                                    HorizontalLayout {
-                                        spacing: 12px;
-                                        alignment: end;
-
-                                        Rectangle {
-                                            height: 24px;
-                                            y: (parent.height - self.height) / 2;
-                                            border-radius: 5px;
-                                            background: root.sync-monitors ? root.accent-main.with-alpha(0.20) : #21252e;
-                                            border-width: 1px;
-                                            border-color: root.sync-monitors ? root.accent-main : #2e3340;
-                                            HorizontalLayout {
-                                                padding-left: 8px;
-                                                padding-right: 8px;
-                                                Text {
-                                                    text: root.is-en ? "⇄ Sync All" : "⇄ Sincronizza";
-                                                    color: root.sync-monitors ? #ffffff : #9da5b4;
-                                                    font-size: 11px;
-                                                    font-weight: 600;
-                                                    vertical-alignment: center;
-                                                }
-                                            }
-                                            TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => {
-                                                    root.sync-monitors = !root.sync-monitors;
-                                                    root.save-settings();
-                                                }
-                                            }
-                                        }
-
-                                        Rectangle {
-                                            height: 24px;
-                                            y: (parent.height - self.height) / 2;
-                                            border-radius: 5px;
-                                            background: #21252e;
-                                            border-width: 1px;
-                                            border-color: #2e3340;
-                                            HorizontalLayout {
-                                                padding-left: 8px;
-                                                padding-right: 8px;
-                                                Text {
-                                                    text: root.is-en ? "↻ Rescan" : "↻ Rileva";
-                                                    color: #9da5b4;
-                                                    font-size: 11px;
-                                                    font-weight: 600;
-                                                    vertical-alignment: center;
-                                                }
-                                            }
-                                            TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => { root.rescan-monitors(); }
-                                            }
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.install-update(); }
                                         }
                                     }
                                 }
@@ -1147,13 +1086,17 @@ export component AppWindow inherits Window {
                     ScrollView {
                         vertical-stretch: 1;
 
-                        VerticalLayout {
-                            padding-left: 22px;
-                            padding-right: 22px;
-                            padding-top: root.is-compact ? 8px : 12px;
-                            padding-bottom: 18px;
-                            spacing: root.is-compact ? 12px : 16px;
-                            alignment: start;
+                        HorizontalLayout {
+                            alignment: center;
+
+                            VerticalLayout {
+                                max-width: 1040px;
+                                padding-left: 22px;
+                                padding-right: 22px;
+                                padding-top: root.is-compact ? 8px : 14px;
+                                padding-bottom: 22px;
+                                spacing: root.is-compact ? 12px : 16px;
+                                alignment: start;
 
                             // ========================================================
                             // VISTA 0: HOME — PANORAMICA RAPIDA MONITOR AFFIANCATI
@@ -2442,6 +2385,7 @@ export component AppWindow inherits Window {
                             }
                         }
                     }
+                    }
                 }
             }
         }
@@ -2449,13 +2393,13 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.07 (DARK MATTE TITANIUM)
+// FINESTRA INSTALLER SETUP v1.08 (DARK MATTE TITANIUM CON ANGOLI ARROTONDATI)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.07";
+    title: "Installazione Monitor Manager v1.08";
     preferred-width: 520px;
     preferred-height: 410px;
-    background: #171a21;
+    background: transparent;
 
     in-out property <bool> opt-desktop: true;
     in-out property <bool> opt-start-menu: true;
@@ -2463,15 +2407,24 @@ export component SetupWindow inherits Window {
     in-out property <bool> opt-launch: true;
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.07 (Dark Matte Titanium)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.08 (Dark Matte Titanium)";
     in-out property <string> install-path: "";
 
     callback start-install();
     callback finish-setup();
 
-    VerticalLayout {
-        padding: 24px;
-        spacing: 16px;
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: 12px;
+        clip: true;
+        background: #171a21;
+        border-width: 1px;
+        border-color: #2c313d;
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
 
         Rectangle {
             height: 76px;
@@ -2606,5 +2559,6 @@ export component SetupWindow inherits Window {
                 }
             }
         }
+    }
     }
 }

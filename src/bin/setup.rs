@@ -9,9 +9,46 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 
-const APP_VERSION: &str = "1.07";
+const APP_VERSION: &str = "1.08";
 const APP_NAME: &str = "Monitor Manager";
 const PAYLOAD_EXE: &[u8] = include_bytes!("../../target/release/monitor-manager.exe");
+
+fn apply_windows_rounded_corners() {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+    };
+
+    let my_pid = std::process::id();
+
+    unsafe extern "system" fn find_hwnd_cb(hwnd: HWND, lparam: isize) -> i32 {
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        let my_pid = *(lparam as *const u32);
+        if pid == my_pid && IsWindowVisible(hwnd) != 0 {
+            let target_ptr = (lparam as *mut usize).add(1) as *mut HWND;
+            *target_ptr = hwnd;
+            return 0;
+        }
+        1
+    }
+
+    let mut state: [usize; 2] = [my_pid as usize, 0];
+    unsafe {
+        EnumWindows(Some(find_hwnd_cb), state.as_mut_ptr() as isize);
+        let found_hwnd = state[1] as HWND;
+        if !found_hwnd.is_null() {
+            let preference: u32 = 2; // DWMWCP_ROUND
+            let _ = DwmSetWindowAttribute(
+                found_hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+                &preference as *const _ as *const _,
+                std::mem::size_of::<u32>() as u32,
+            );
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 struct InstallOptions {
@@ -341,5 +378,12 @@ fn main() {
         let _ = slint::quit_event_loop();
     });
 
-    let _ = ui.run();
+    let _ = ui.show();
+    apply_windows_rounded_corners();
+    thread::spawn(|| {
+        thread::sleep(std::time::Duration::from_millis(80));
+        apply_windows_rounded_corners();
+    });
+
+    let _ = slint::run_event_loop_until_quit();
 }
