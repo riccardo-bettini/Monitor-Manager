@@ -1,23 +1,22 @@
 # Monitor Manager
 
-Applicazione nativa per Windows scritta in **Rust** per il rilevamento automatico e il controllo hardware universale in tempo reale dei monitor collegati (es. **ASUS TUF Gaming**, **AOC**, **KTC** e qualsiasi monitor compatibile **DDC/CI VESA MCCS**), con interfaccia ispirata ad **Apple iOS 26 Liquid Glass**.
+Applicazione nativa ultra-leggera per Windows scritta in **Rust** (con Slint toolkit nativo e DDC/CI VESA MCCS) per il rilevamento automatico e il controllo hardware in tempo reale dei monitor collegati (es. **ASUS TUF Gaming**, **AOC**, **KTC** e qualsiasi monitor compatibile DDC/CI).
 
-## Caratteristiche Principali (`v1.00`)
+## Caratteristiche Principali (`v1.04`)
+- **Architettura Ultra-Leggera Nata da Zero**: Consumo di RAM minimo (< 25-30 MB) con rendering accelerato nativo.
 - **Rilevamento Automatico Multi-Monitor**: Identificazione in tempo reale tramite `EnumDisplayMonitors`, `QueryDisplayConfig` ed **EDID** hardware (marca, modello, risoluzione, stato DDC/CI).
-- **Zero-Lag Hardware Control**: Coda di comandi atomica con coalescenza su worker thread dedicati per regolare i parametri del monitor senza alcun blocco dell'interfaccia a 120 FPS.
-- **Pacchetto Controlli Base**:
-  - **Immagine**: Luminosità (`0x10`), Contrasto (`0x12`), Saturazione (`0x8A`), Nitidezza / Sharpness (`0x87`).
-  - **Colore**: Guadagno Rosso (`0x16`), Verde (`0x18`), Blu (`0x1A`) e Temperatura Colore (`0x14`).
-  - **Audio & Sorgente**: Volume Altoparlanti (`0x62`) e Sorgente Input Video (`0x60` — DisplayPort 1/2, HDMI 1/2, USB-C).
-- **Doppia Modalità di Visualizzazione**:
-  - **Vista Schede Affiancate (Multi-Card)** con funzione **Sync Tutti**.
-  - **Vista Selettore Singolo (Monitor Switcher)**.
-- **Design Apple iOS 26 Liquid Glass**:
-  - Sfondo con sfumatura delicata e macchie di colore fluttuanti, schede e controlli in vetro satinato traslucido (`backdrop-filter: blur`), bordi luminosi speculari e animazioni a molla.
-  - Supporto completo per tema **Chiaro**, **Scuro** e **Sincronizzato con Windows**.
+- **Zero-Lag Hardware Control**: Coda di comandi atomica con coalescenza su worker thread dedicati per regolare i parametri del monitor a 144Hz+ senza alcun blocco dell'interfaccia.
+- **Pacchetto Controlli Hardware**:
+  - **Luminosità** (`0x10`), **Contrasto** (`0x12`), **Nitidezza** (`0x87`), **Saturazione** (`0x8A`).
+  - **RGB Gain**: Guadagno Rosso (`0x16`), Verde (`0x18`), Blu (`0x1A`).
+  - **Audio**: Volume (`0x62`).
+- **Interfaccia Cyberpunk Slate / Dark Mode**:
+  - Sidebar scura con glow al neon reattivo sul monitor selezionato.
+  - Indicatore circolare luminoso di percentuale.
+  - Slider interattivi reattivi con feedback visivo immediato.
 - **System Tray & Auto-Updater**:
-  - Riduzione nella System Tray di Windows e avvio automatico opzionale con Windows.
-  - Sistema di aggiornamento automatico collegato alle **GitHub Releases** di questo repository.
+  - Riduzione nella barra delle applicazioni / System Tray di Windows.
+  - Sistema di aggiornamento automatico silenzioso integrato con le **GitHub Releases**.
 
 ## Installazione
-Scarica ed esegui **`Monitor-Manager-Setup-v1.00.exe`** dalla sezione [Releases](https://github.com/riccardo-bettini/Monitor-Manager/releases).
+Scarica ed esegui l'installer dalla sezione [Releases](https://github.com/riccardo-bettini/Monitor-Manager/releases).

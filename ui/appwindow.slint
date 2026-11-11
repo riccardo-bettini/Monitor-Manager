@@ -43,7 +43,7 @@ component NeonSlider inherits Rectangle {
     in property <bool> enabled: true;
     callback changed(int);
 
-    height: 22px;
+    height: 24px;
     background: transparent;
 
     property <float> ratio: Math.clamp(
@@ -55,50 +55,53 @@ component NeonSlider inherits Rectangle {
     // Corsia di fondo scura opaca
     track-bg := Rectangle {
         y: (parent.height - self.height) / 2;
-        height: 4px;
-        width: parent.width;
-        border-radius: 2px;
-        background: #454b59;
+        height: 6px;
+        width: 100%;
+        border-radius: 3px;
+        background: #3c4250;
 
         // Parte attiva colorata
         Rectangle {
             x: 0px;
             y: 0px;
-            height: parent.height;
+            height: 100%;
             width: parent.width * root.ratio;
-            border-radius: 2px;
+            border-radius: 3px;
             background: root.enabled ? root.track-color : #555b69;
         }
     }
 
     // Alone Glow attorno al cursore (opzionale in base a glow-style, 0 byte RAM extra)
     if root.enabled && root.glow-style != "none" : Rectangle {
-        width: root.glow-style == "intense" ? 22px : 18px;
+        width: root.glow-style == "intense" ? 24px : 20px;
         height: self.width;
         border-radius: self.width / 2;
-        x: (parent.width - 12px) * root.ratio + 6px - self.width / 2;
+        x: (parent.width - 16px) * root.ratio + 8px - self.width / 2;
         y: (parent.height - self.height) / 2;
-        background: root.track-color.with-alpha(root.glow-style == "intense" ? 0.38 : 0.22);
+        background: root.track-color.with-alpha(root.glow-style == "intense" ? 0.35 : 0.20);
     }
 
     // Thumb circolare con anello scuro interno come nel mockup
     Rectangle {
-        width: 12px;
-        height: 12px;
-        border-radius: 6px;
+        width: 16px;
+        height: 16px;
+        border-radius: 8px;
         x: (parent.width - self.width) * root.ratio;
         y: (parent.height - self.height) / 2;
         background: root.enabled ? root.track-color : #6c7382;
-        border-width: 2px;
+        border-width: 2.5px;
         border-color: #21252e;
     }
 
     ta := TouchArea {
+        width: 100%;
+        height: 100%;
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
-        moved => {
-            if (self.pressed && root.width > 0px) {
-                let r = Math.clamp(self.mouse-x / root.width, 0.0, 1.0);
+
+        function update-from-mouse(mx: length) {
+            if (root.width > 0px) {
+                let r = Math.clamp(mx / root.width, 0.0, 1.0);
                 let nv = Math.round(root.minimum + r * (root.maximum - root.minimum));
                 if (nv != root.value) {
                     root.value = nv;
@@ -106,14 +109,16 @@ component NeonSlider inherits Rectangle {
                 }
             }
         }
+
         pointer-event(ev) => {
-            if (ev.kind == PointerEventKind.down && root.width > 0px) {
-                let r = Math.clamp(self.mouse-x / root.width, 0.0, 1.0);
-                let nv = Math.round(root.minimum + r * (root.maximum - root.minimum));
-                if (nv != root.value) {
-                    root.value = nv;
-                    root.changed(nv);
-                }
+            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                self.update-from-mouse(self.mouse-x);
+            }
+        }
+
+        moved => {
+            if (self.enabled && self.pressed) {
+                self.update-from-mouse(self.mouse-x);
             }
         }
     }
@@ -307,7 +312,7 @@ export component AppWindow inherits Window {
             id: 0,
             name: "ASUS TUF Gaming VG27A",
             brand: "ASUS",
-            resolution: "2560×1440",
+            resolution: "2560×1440 | 165Hz",
             is-primary: true,
             ddc-supported: true,
             brightness: 75,
@@ -338,6 +343,31 @@ export component AppWindow inherits Window {
     // "dashboard" | "profiles" | "multi" | "settings"
     in-out property <string> active-view: "dashboard";
 
+    // Proprietà reattive dirette per slider ultra-reattivi (zero delay, zero freeze)
+    in-out property <int> current-brightness: 75;
+    in-out property <int> current-contrast: 50;
+    in-out property <int> current-sharpness: 60;
+    in-out property <int> current-saturation: 50;
+    in-out property <int> current-red-gain: 50;
+    in-out property <int> current-green-gain: 50;
+    in-out property <int> current-blue-gain: 50;
+    in-out property <int> current-volume: 40;
+
+    public function sync-current-values() {
+        if (root.monitors.length > 0) {
+            let idx = Math.clamp(root.selected-monitor-index, 0, root.monitors.length - 1);
+            let m = root.monitors[idx];
+            root.current-brightness = m.brightness;
+            root.current-contrast = m.contrast;
+            root.current-sharpness = m.sharpness;
+            root.current-saturation = m.saturation;
+            root.current-red-gain = m.red-gain;
+            root.current-green-gain = m.green-gain;
+            root.current-blue-gain = m.blue-gain;
+            root.current-volume = m.volume;
+        }
+    }
+
     // --- Impostazioni Personalizzazione (Zero RAM Overhead) ---
     // Lingua: "it" | "en"
     in-out property <string> lang: "it";
@@ -358,10 +388,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.03";
-    in-out property <string> update-status-text: "Monitor Manager v1.03 (Dark Matte Titanium)";
+    in-out property <string> app-version: "1.04";
+    in-out property <string> update-status-text: "Monitor Manager v1.04 (Dark Matte Titanium)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.03";
+    in-out property <string> latest-version: "1.04";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -372,7 +402,6 @@ export component AppWindow inherits Window {
     callback check-updates();
     callback install-update();
     callback quit-app();
-    callback start-window-drag();
     callback minimize-window();
     callback toggle-maximize-window();
     callback close-window();
@@ -460,10 +489,15 @@ export component AppWindow inherits Window {
                     padding-bottom: 16px;
                     spacing: 12px;
 
-                    // Header App: Icona Monitor + "Monitor Manager" (trascinabile)
+                    // Header App: Icona Monitor + "Monitor Manager" (trascinabile con WindowMoveArea nativo Slint)
                     Rectangle {
                         height: 34px;
                         background: transparent;
+
+                        WindowMoveArea {
+                            width: 100%;
+                            height: 100%;
+                        }
 
                         HorizontalLayout {
                             spacing: 10px;
@@ -495,14 +529,6 @@ export component AppWindow inherits Window {
                                 font-size: 14px;
                                 font-weight: 600;
                                 vertical-alignment: center;
-                            }
-                        }
-
-                        TouchArea {
-                            pointer-event(ev) => {
-                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
-                                    root.start-window-drag();
-                                }
                             }
                         }
                     }
@@ -588,6 +614,7 @@ export component AppWindow inherits Window {
                                     mouse-cursor: pointer;
                                     clicked => {
                                         root.selected-monitor-index = idx;
+                                        root.sync-current-values();
                                         if (root.active-view == "multi" || root.active-view == "settings") {
                                             root.active-view = "dashboard";
                                         }
@@ -789,17 +816,23 @@ export component AppWindow inherits Window {
                 VerticalLayout {
                     spacing: 0px;
 
-                    // --- BARRA SUPERIORE BORDERLESS CON BLOCCO PULSANTI FINESTRA CORAL/ACCENT ---
+                    // --- BARRA SUPERIORE BORDERLESS CON TRASCINAMENTO NATIVO SLINT ---
                     Rectangle {
                         height: 38px;
                         background: transparent;
+
+                        // Area di trascinamento finestra nativa Slint (zero deadlock Win32)
+                        WindowMoveArea {
+                            width: 100%;
+                            height: 100%;
+                        }
 
                         HorizontalLayout {
                             padding-left: 22px;
                             padding-right: 0px;
                             spacing: 0px;
 
-                            // Zona trascinamento finestra + quick toolbar discreta
+                            // Zona comandi rapidi header
                             Rectangle {
                                 horizontal-stretch: 1;
                                 background: transparent;
@@ -892,16 +925,6 @@ export component AppWindow inherits Window {
                                                 mouse-cursor: pointer;
                                                 clicked => { root.rescan-monitors(); }
                                             }
-                                        }
-                                    }
-                                }
-
-                                // Drag area sulla parte libera della barra superiore
-                                TouchArea {
-                                    z: -1;
-                                    pointer-event(ev) => {
-                                        if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
-                                            root.start-window-drag();
                                         }
                                     }
                                 }
@@ -1090,7 +1113,7 @@ export component AppWindow inherits Window {
                                         VerticalLayout {
                                             alignment: center;
                                             ArcGauge {
-                                                percentage: Math.round(root.current-monitor.brightness * 100 / Math.max(1, root.current-monitor.brightness-max));
+                                                percentage: Math.round(root.current-brightness * 100 / Math.max(1, root.current-monitor.brightness-max));
                                                 label: root.is-en ? "Brightness" : "Luminosità";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
@@ -1106,7 +1129,7 @@ export component AppWindow inherits Window {
                                     TitaniumStatCard {
                                         horizontal-stretch: 1;
                                         title: root.is-en ? "Brightness:" : "Luminosità:";
-                                        value: root.current-monitor.brightness;
+                                        value <=> root.current-brightness;
                                         maximum: root.current-monitor.brightness-max;
                                         supported: root.current-monitor.brightness-sup;
                                         accent: root.accent-main;
@@ -1118,7 +1141,7 @@ export component AppWindow inherits Window {
                                     TitaniumStatCard {
                                         horizontal-stretch: 1;
                                         title: root.is-en ? "Contrast:" : "Contrasto:";
-                                        value: root.current-monitor.contrast;
+                                        value <=> root.current-contrast;
                                         maximum: root.current-monitor.contrast-max;
                                         supported: root.current-monitor.contrast-sup;
                                         accent: root.accent-main;
@@ -1130,7 +1153,7 @@ export component AppWindow inherits Window {
                                     TitaniumStatCard {
                                         horizontal-stretch: 1;
                                         title: root.is-en ? "Sharpness:" : "Nitidezza:";
-                                        value: root.current-monitor.sharpness;
+                                        value <=> root.current-sharpness;
                                         maximum: root.current-monitor.sharpness-max;
                                         supported: root.current-monitor.sharpness-sup;
                                         accent: root.accent-main;
@@ -1142,7 +1165,7 @@ export component AppWindow inherits Window {
                                     TitaniumStatCard {
                                         horizontal-stretch: 1;
                                         title: root.is-en ? "Saturation:" : "Saturazione:";
-                                        value: root.current-monitor.saturation;
+                                        value <=> root.current-saturation;
                                         maximum: root.current-monitor.saturation-max;
                                         supported: root.current-monitor.saturation-sup;
                                         accent: root.accent-main;
@@ -1196,7 +1219,12 @@ export component AppWindow inherits Window {
                                                 }
                                                 TouchArea {
                                                     mouse-cursor: pointer;
-                                                    clicked => { root.reset-rgb(root.current-monitor.id); }
+                                                    clicked => {
+                                                        root.current-red-gain = 50;
+                                                        root.current-green-gain = 50;
+                                                        root.current-blue-gain = 50;
+                                                        root.reset-rgb(root.current-monitor.id);
+                                                    }
                                                 }
                                             }
                                         }
@@ -1214,7 +1242,7 @@ export component AppWindow inherits Window {
                                             }
                                             NeonSlider {
                                                 horizontal-stretch: 1;
-                                                value: root.current-monitor.red-gain;
+                                                value <=> root.current-red-gain;
                                                 minimum: 0;
                                                 maximum: 100;
                                                 track-color: #e85642;
@@ -1223,7 +1251,7 @@ export component AppWindow inherits Window {
                                             }
                                             Text {
                                                 width: 38px;
-                                                text: "\{root.current-monitor.red-gain}%";
+                                                text: "\{root.current-red-gain}%";
                                                 color: #9da5b4;
                                                 font-size: 12px;
                                                 font-weight: 600;
@@ -1245,7 +1273,7 @@ export component AppWindow inherits Window {
                                             }
                                             NeonSlider {
                                                 horizontal-stretch: 1;
-                                                value: root.current-monitor.green-gain;
+                                                value <=> root.current-green-gain;
                                                 minimum: 0;
                                                 maximum: 100;
                                                 track-color: #46b966;
@@ -1254,7 +1282,7 @@ export component AppWindow inherits Window {
                                             }
                                             Text {
                                                 width: 38px;
-                                                text: "\{root.current-monitor.green-gain}%";
+                                                text: "\{root.current-green-gain}%";
                                                 color: #9da5b4;
                                                 font-size: 12px;
                                                 font-weight: 600;
@@ -1276,7 +1304,7 @@ export component AppWindow inherits Window {
                                             }
                                             NeonSlider {
                                                 horizontal-stretch: 1;
-                                                value: root.current-monitor.blue-gain;
+                                                value <=> root.current-blue-gain;
                                                 minimum: 0;
                                                 maximum: 100;
                                                 track-color: #4a7ee5;
@@ -1285,7 +1313,7 @@ export component AppWindow inherits Window {
                                             }
                                             Text {
                                                 width: 38px;
-                                                text: "\{root.current-monitor.blue-gain}%";
+                                                text: "\{root.current-blue-gain}%";
                                                 color: #9da5b4;
                                                 font-size: 12px;
                                                 font-weight: 600;
@@ -1330,21 +1358,33 @@ export component AppWindow inherits Window {
                                                 text: root.is-en ? "☀ Gaming Vivid (90/75)" : "☀ Gaming Vivace (90/75)";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
-                                                clicked => { root.apply-preset(root.current-monitor.id, 90, 75); }
+                                                clicked => {
+                                                    root.current-brightness = 90;
+                                                    root.current-contrast = 75;
+                                                    root.apply-preset(root.current-monitor.id, 90, 75);
+                                                }
                                             }
                                             TitaniumChip {
                                                 horizontal-stretch: 1;
                                                 text: root.is-en ? "◐ Standard sRGB (75/50)" : "◐ Standard sRGB (75/50)";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
-                                                clicked => { root.apply-preset(root.current-monitor.id, 75, 50); }
+                                                clicked => {
+                                                    root.current-brightness = 75;
+                                                    root.current-contrast = 50;
+                                                    root.apply-preset(root.current-monitor.id, 75, 50);
+                                                }
                                             }
                                             TitaniumChip {
                                                 horizontal-stretch: 1;
                                                 text: root.is-en ? "☾ Eye Care Night (35/45)" : "☾ Comfort Notturno (35/45)";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
-                                                clicked => { root.apply-preset(root.current-monitor.id, 35, 45); }
+                                                clicked => {
+                                                    root.current-brightness = 35;
+                                                    root.current-contrast = 45;
+                                                    root.apply-preset(root.current-monitor.id, 35, 45);
+                                                }
                                             }
                                         }
 
@@ -1413,7 +1453,7 @@ export component AppWindow inherits Window {
                                                 font-weight: 600;
                                             }
                                             Text {
-                                                text: "\{root.current-monitor.volume}%";
+                                                text: "\{root.current-volume}%";
                                                 color: root.accent-main;
                                                 font-size: 14px;
                                                 font-weight: 700;
@@ -1421,7 +1461,7 @@ export component AppWindow inherits Window {
                                         }
 
                                         NeonSlider {
-                                            value: root.current-monitor.volume;
+                                            value <=> root.current-volume;
                                             minimum: 0;
                                             maximum: 100;
                                             track-color: root.accent-main;
@@ -1524,6 +1564,7 @@ export component AppWindow inherits Window {
                                                 glow-style: root.glow-style;
                                                 clicked => {
                                                     root.selected-monitor-index = m-idx;
+                                                    root.sync-current-values();
                                                     root.active-view = "dashboard";
                                                 }
                                             }
@@ -1893,10 +1934,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.03 (DARK MATTE TITANIUM)
+// FINESTRA INSTALLER SETUP v1.04 (DARK MATTE TITANIUM)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.03";
+    title: "Installazione Monitor Manager v1.04";
     preferred-width: 520px;
     preferred-height: 410px;
     background: #171a21;
@@ -1907,7 +1948,7 @@ export component SetupWindow inherits Window {
     in-out property <bool> opt-launch: true;
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.03 (Dark Matte Titanium)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.04 (Dark Matte Titanium)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -1931,7 +1972,7 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.03";
+                        text: "Monitor Manager v1.04";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
@@ -2018,7 +2059,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione..." : "Installa v1.03 Ora";
+                    text: root.installing ? "Installazione..." : "Installa v1.04 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;

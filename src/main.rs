@@ -8,7 +8,7 @@ slint::include_modules!();
 
 use ddc::{DdcEngine, MonitorInfo};
 use settings::AppSettings;
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::env;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -33,25 +33,6 @@ fn trim_process_working_set() {
     }
     unsafe {
         let _ = SetProcessWorkingSetSize(GetCurrentProcess(), usize::MAX, usize::MAX);
-    }
-}
-
-/// Avvia il trascinamento nativo della finestra borderless Windows tramite Win32 HTCAPTION
-fn initiate_native_window_drag() {
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetForegroundWindow() -> isize;
-        fn ReleaseCapture() -> i32;
-        fn SendMessageW(hWnd: isize, Msg: u32, wParam: usize, lParam: isize) -> isize;
-    }
-    const WM_NCLBUTTONDOWN: u32 = 0x00A1;
-    const HTCAPTION: usize = 2;
-    unsafe {
-        let hwnd = GetForegroundWindow();
-        if hwnd != 0 {
-            let _ = ReleaseCapture();
-            let _ = SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
-        }
     }
 }
 
@@ -199,11 +180,6 @@ fn main() {
         return;
     }
 
-    // Usa il renderer software ultra-leggero di Slint per azzerare l'impatto sulla VRAM/GPU durante il gaming
-    if env::var("SLINT_BACKEND").is_err() {
-        env::set_var("SLINT_BACKEND", "winit-software");
-    }
-
     updater::cleanup_old_executable();
 
     let start_minimized = env::args().any(|a| a == "--minimized");
@@ -257,7 +233,7 @@ fn main() {
 
     let _tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
-        .with_tooltip("Monitor Manager v1.03 (Dark Matte Titanium)")
+        .with_tooltip("Monitor Manager v1.04 (Dark Matte Titanium)")
         .with_icon(tray_icon_data)
         .build()
         .ok();
@@ -282,6 +258,7 @@ fn main() {
                     if let Some(u) = uw.upgrade() {
                         let vec_ui: Vec<UiMonitor> = list.iter().map(to_ui_monitor).collect();
                         u.set_monitors(ModelRc::from(Rc::new(VecModel::from(vec_ui))));
+                        u.invoke_sync_current_values();
                         let _ = u.show();
                     }
                 });
@@ -326,11 +303,6 @@ fn main() {
         }
     });
 
-    // Callback barra superiore borderless: Drag finestra
-    ui.on_start_window_drag(move || {
-        initiate_native_window_drag();
-    });
-
     // Callback barra superiore borderless: Riduci a icona (—)
     let ui_weak_min = ui.as_weak();
     ui.on_minimize_window(move || {
@@ -341,12 +313,28 @@ fn main() {
     });
 
     // Callback barra superiore borderless: Ingrandisci / Ripristina (▢)
+    // Con salvataggio dimensione precedente per prevenire il collasso o blocco su Windows
     let ui_weak_max = ui.as_weak();
+    let last_window_size = Arc::new(Mutex::new(None::<(u32, u32)>));
+    let last_ws_clone = Arc::clone(&last_window_size);
     ui.on_toggle_maximize_window(move || {
         if let Some(u) = ui_weak_max.upgrade() {
-            let next_max = !u.window().is_maximized();
-            u.window().set_maximized(next_max);
-            u.set_window_maximized(next_max);
+            let is_max = u.window().is_maximized();
+            if !is_max {
+                let sz = u.window().size();
+                if sz.width > 0 && sz.height > 0 {
+                    *last_ws_clone.lock().unwrap() = Some((sz.width, sz.height));
+                }
+                u.window().set_maximized(true);
+                u.set_window_maximized(true);
+            } else {
+                u.window().set_maximized(false);
+                u.set_window_maximized(false);
+                let (w, h) = last_ws_clone.lock().unwrap().unwrap_or((980, 620));
+                let w = w.max(860);
+                let h = h.max(540);
+                u.window().set_size(slint::PhysicalSize::new(w, h));
+            }
         }
     });
 
@@ -365,7 +353,7 @@ fn main() {
         }
     });
 
-    // Callback: Modifica codice VCP (Luminosità, Contrasto, Nitidezza, Saturazione, RGB, Volume, Input)
+    // Callback: Modifica codice VCP ultra-veloce (Zero lag, invio asincrono coalesced)
     let ddc_vcp = Arc::clone(&ddc_engine);
     let ui_weak_vcp = ui.as_weak();
     ui.on_set_vcp(move |monitor_id, vcp_code, value| {
@@ -377,31 +365,6 @@ fn main() {
                 value as u32,
                 sync_all,
             );
-
-            // Aggiorna il modello Slint in memoria per riflettere il nuovo valore istantaneamente
-            let monitors_model = u.get_monitors();
-            let mut updated: Vec<UiMonitor> = (0..monitors_model.row_count())
-                .filter_map(|i| monitors_model.row_data(i))
-                .collect();
-
-            for m in updated.iter_mut() {
-                if sync_all || m.id == monitor_id {
-                    match vcp_code as u8 {
-                        ddc::VCP_BRIGHTNESS => m.brightness = value,
-                        ddc::VCP_CONTRAST => m.contrast = value,
-                        ddc::VCP_SHARPNESS => m.sharpness = value,
-                        ddc::VCP_SATURATION => m.saturation = value,
-                        ddc::VCP_RED_GAIN => m.red_gain = value,
-                        ddc::VCP_GREEN_GAIN => m.green_gain = value,
-                        ddc::VCP_BLUE_GAIN => m.blue_gain = value,
-                        ddc::VCP_COLOR_TEMP => m.color_temp = value,
-                        ddc::VCP_VOLUME => m.volume = value,
-                        ddc::VCP_INPUT_SOURCE => m.input_source = value,
-                        _ => {}
-                    }
-                }
-            }
-            u.set_monitors(ModelRc::from(Rc::new(VecModel::from(updated))));
         }
     });
 
@@ -423,18 +386,6 @@ fn main() {
                 con as u32,
                 sync_all,
             );
-
-            let monitors_model = u.get_monitors();
-            let mut updated: Vec<UiMonitor> = (0..monitors_model.row_count())
-                .filter_map(|i| monitors_model.row_data(i))
-                .collect();
-            for m in updated.iter_mut() {
-                if sync_all || m.id == monitor_id {
-                    m.brightness = lum;
-                    m.contrast = con;
-                }
-            }
-            u.set_monitors(ModelRc::from(Rc::new(VecModel::from(updated))));
         }
     });
 
@@ -447,19 +398,6 @@ fn main() {
             ddc_rgb.set_vcp_value(monitor_id as usize, ddc::VCP_RED_GAIN, 50, sync_all);
             ddc_rgb.set_vcp_value(monitor_id as usize, ddc::VCP_GREEN_GAIN, 50, sync_all);
             ddc_rgb.set_vcp_value(monitor_id as usize, ddc::VCP_BLUE_GAIN, 50, sync_all);
-
-            let monitors_model = u.get_monitors();
-            let mut updated: Vec<UiMonitor> = (0..monitors_model.row_count())
-                .filter_map(|i| monitors_model.row_data(i))
-                .collect();
-            for m in updated.iter_mut() {
-                if sync_all || m.id == monitor_id {
-                    m.red_gain = 50;
-                    m.green_gain = 50;
-                    m.blue_gain = 50;
-                }
-            }
-            u.set_monitors(ModelRc::from(Rc::new(VecModel::from(updated))));
         }
     });
 
@@ -475,6 +413,7 @@ fn main() {
                 if let Some(u) = uw.upgrade() {
                     let vec_ui: Vec<UiMonitor> = list.iter().map(to_ui_monitor).collect();
                     u.set_monitors(ModelRc::from(Rc::new(VecModel::from(vec_ui))));
+                    u.invoke_sync_current_values();
                 }
             });
         });
@@ -573,8 +512,8 @@ fn main() {
                 if let Some(u) = uw_scan.upgrade() {
                     let vec_ui: Vec<UiMonitor> = list.iter().map(to_ui_monitor).collect();
                     u.set_monitors(ModelRc::from(Rc::new(VecModel::from(vec_ui))));
+                    u.invoke_sync_current_values();
                 }
-                trim_process_working_set();
             });
 
             if auto_upd {
