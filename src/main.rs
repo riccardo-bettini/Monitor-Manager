@@ -315,6 +315,7 @@ fn main() {
         ui.set_start_with_windows(s.start_with_windows);
         ui.set_auto_check_updates(s.auto_check_updates);
         ui.set_acrylic_enabled(s.acrylic_transparency);
+        ui.set_animations_enabled(s.animations_enabled);
     }
 
     // Configurazione System Tray
@@ -666,6 +667,7 @@ fn main() {
             s.start_with_windows = u.get_start_with_windows();
             s.auto_check_updates = u.get_auto_check_updates();
             s.acrylic_transparency = u.get_acrylic_enabled();
+            s.animations_enabled = u.get_animations_enabled();
             let _ = s.save();
         }
     });

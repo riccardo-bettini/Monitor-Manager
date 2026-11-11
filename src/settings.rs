@@ -60,6 +60,9 @@ pub struct AppSettings {
     /// Vera trasparenza Acrylic di Windows (DWM) sulla sidebar sinistra
     #[serde(default = "default_true")]
     pub acrylic_transparency: bool,
+    /// Animazioni fluide a molla (Spring animations) in tutta l'applicazione
+    #[serde(default = "default_true")]
+    pub animations_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -77,6 +80,7 @@ impl Default for AppSettings {
             layout_density: default_layout_density(),
             monitor_order: Vec::new(),
             acrylic_transparency: true,
+            animations_enabled: true,
         }
     }
 }

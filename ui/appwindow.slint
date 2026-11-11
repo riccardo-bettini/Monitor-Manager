@@ -32,6 +32,39 @@ export struct UiMonitor {
 }
 
 // ============================================================================
+// TEMA GLOBALE ANIMAZIONI A MOLLA (SPRING ANIMATIONS) & ZERO OVERHEAD
+// ============================================================================
+export global SpringTheme {
+    in-out property <bool> animations-enabled: true;
+}
+
+// ============================================================================
+// CONTENITORE DI VISTA CON TRANSIZIONE A MOLLA (FADE & SLIDE-UP 12PX)
+// ============================================================================
+component SpringViewContainer inherits Rectangle {
+    in property <bool> is-active: false;
+
+    visible: root.is-active;
+
+    inner := Rectangle {
+        width: 100%;
+        y: root.is-active ? 0px : 12px;
+        opacity: root.is-active ? 1.0 : 0.0;
+
+        animate opacity {
+            duration: SpringTheme.animations-enabled ? 220ms : 0ms;
+            easing: ease-out;
+        }
+        animate y {
+            duration: SpringTheme.animations-enabled ? 240ms : 0ms;
+            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+        }
+
+        @children
+    }
+}
+
+// ============================================================================
 // SLIDER DARK MATTE TITANIUM CON THUMB GLOW, TRACK COLORATA, WHEEL E FRECCE TASTIERA
 // ============================================================================
 component NeonSlider inherits Rectangle {
@@ -86,36 +119,59 @@ component NeonSlider inherits Rectangle {
             background: #3c4250;
 
             // Parte attiva colorata
-            Rectangle {
+            active-track := Rectangle {
                 x: 0px;
                 y: 0px;
                 height: 100%;
                 width: parent.width * root.ratio;
                 border-radius: 3px;
                 background: root.enabled ? root.track-color : #555b69;
+
+                animate width {
+                    duration: SpringTheme.animations-enabled && !ta.pressed ? 200ms : 0ms;
+                    easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                }
             }
         }
 
-        // Alone Glow attorno al cursore (opzionale in base a glow-style, 0 byte RAM extra)
+        // Alone Glow attorno al cursore (opzionale in base a glow-style, con rimbalzo a molla)
         if root.enabled && root.glow-style != "none" : Rectangle {
-            width: root.glow-style == "intense" ? 24px : 20px;
+            width: (root.glow-style == "intense" ? 24px : 20px) + (ta.has-hover ? 4px : 0px);
             height: self.width;
             border-radius: self.width / 2;
             x: (parent.width - 16px) * root.ratio + 8px - self.width / 2;
             y: (parent.height - self.height) / 2;
             background: root.track-color.with-alpha(root.glow-style == "intense" ? 0.35 : 0.20);
+
+            animate x {
+                duration: SpringTheme.animations-enabled && !ta.pressed ? 200ms : 0ms;
+                easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+            }
+            animate width, height {
+                duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+                easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+            }
         }
 
-        // Thumb circolare con anello scuro interno come nel mockup
-        Rectangle {
-            width: 16px;
-            height: 16px;
-            border-radius: 8px;
+        // Thumb circolare con anello scuro interno e animazione a molla elastica
+        thumb := Rectangle {
+            width: ta.pressed ? 19px : (ta.has-hover ? 18px : 16px);
+            height: self.width;
+            border-radius: self.width / 2;
             x: (parent.width - self.width) * root.ratio;
             y: (parent.height - self.height) / 2;
             background: root.enabled ? root.track-color : #6c7382;
             border-width: 2.5px;
             border-color: #21252e;
+
+            animate x {
+                duration: SpringTheme.animations-enabled && !ta.pressed ? 200ms : 0ms;
+                easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+            }
+            animate width, height {
+                duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+                easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+            }
         }
 
         ta := TouchArea {
@@ -256,9 +312,14 @@ component TitaniumStatCard inherits Rectangle {
 
     height: root.compact ? 112px : 128px;
     border-radius: 10px;
-    background: #21252e;
+    background: ta-card.has-hover ? #252a35 : #21252e;
     border-width: 1px;
-    border-color: #2d323e;
+    border-color: ta-card.has-hover ? root.accent.with-alpha(0.55) : #2d323e;
+
+    animate background, border-color {
+        duration: SpringTheme.animations-enabled ? 200ms : 0ms;
+        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
 
     ta-card := TouchArea {
         width: 100%;
@@ -315,7 +376,7 @@ component TitaniumStatCard inherits Rectangle {
 }
 
 // ============================================================================
-// SWITCH TOGGLE TITANIUM PER LE IMPOSTAZIONI
+// SWITCH TOGGLE TITANIUM PER LE IMPOSTAZIONI CON RIMBALZO A MOLLA ELASTICO
 // ============================================================================
 component TitaniumToggle inherits Rectangle {
     in-out property <bool> checked: false;
@@ -329,6 +390,11 @@ component TitaniumToggle inherits Rectangle {
     border-width: 1px;
     border-color: root.checked ? root.accent : #454b59;
 
+    animate background, border-color {
+        duration: SpringTheme.animations-enabled ? 200ms : 0ms;
+        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+
     Rectangle {
         width: 18px;
         height: 18px;
@@ -336,7 +402,10 @@ component TitaniumToggle inherits Rectangle {
         x: root.checked ? parent.width - self.width - 3px : 3px;
         y: 3px;
         background: #ffffff;
-        animate x { duration: 120ms; easing: ease-out; }
+        animate x {
+            duration: SpringTheme.animations-enabled ? 240ms : 0ms;
+            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+        }
     }
 
     TouchArea {
@@ -349,7 +418,7 @@ component TitaniumToggle inherits Rectangle {
 }
 
 // ============================================================================
-// PULSANTE CHIP TITANIUM
+// PULSANTE CHIP TITANIUM CON FEEDBACK A MOLLA
 // ============================================================================
 component TitaniumChip inherits Rectangle {
     in property <string> text;
@@ -360,9 +429,14 @@ component TitaniumChip inherits Rectangle {
 
     height: 30px;
     border-radius: 7px;
-    background: root.active ? root.accent.with-alpha(0.18) : #282d38;
+    background: root.active ? root.accent.with-alpha(0.18) : (ta-chip.has-hover ? #323846 : #282d38);
     border-width: root.active ? (root.glow-style == "intense" ? 2px : 1.5px) : 1px;
-    border-color: root.active ? root.accent : #363c4a;
+    border-color: root.active ? root.accent : (ta-chip.has-hover ? root.accent.with-alpha(0.4) : #363c4a);
+
+    animate background, border-color {
+        duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
 
     HorizontalLayout {
         padding-left: 12px;
@@ -377,7 +451,7 @@ component TitaniumChip inherits Rectangle {
         }
     }
 
-    TouchArea {
+    ta-chip := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
@@ -468,6 +542,8 @@ export component AppWindow inherits Window {
     in-out property <string> layout-density: "standard";
     // Vera Trasparenza Windows Acrylic (DWM) sulla sidebar
     in-out property <bool> acrylic-enabled: true;
+    // Animazioni fluide a molla (Spring animations) in tutta l'interfaccia
+    in-out property <bool> animations-enabled <=> SpringTheme.animations-enabled;
 
     // Impostazioni Funzionali & Sistema
     in-out property <string> layout-mode: "single";
@@ -479,10 +555,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.10";
-    in-out property <string> update-status-text: "Monitor Manager v1.10 (Dark Matte Titanium & Acrylic)";
+    in-out property <string> app-version: "1.11";
+    in-out property <string> update-status-text: "Monitor Manager v1.11 (Dark Matte Titanium & Spring Animations)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.10";
+    in-out property <string> latest-version: "1.11";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -694,9 +770,21 @@ export component AppWindow inherits Window {
                     Rectangle {
                         height: 40px;
                         border-radius: 9px;
-                        background: root.active-view == "home" ? #2f3441 : transparent;
-                        border-width: root.active-view == "home" ? 1px : 0px;
-                        border-color: root.active-view == "home" ? root.accent-main.with-alpha(0.5) : transparent;
+                        background: root.active-view == "home" ? #2f3441 : (home-ta.has-hover ? #252a36 : transparent);
+                        border-width: root.active-view == "home" ? 1px : (home-ta.has-hover ? 1px : 0px);
+                        border-color: root.active-view == "home" ? root.accent-main.with-alpha(0.5) : (home-ta.has-hover ? root.accent-main.with-alpha(0.25) : transparent);
+
+                        animate background, border-color {
+                            duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                        }
+
+                        home-ta := TouchArea {
+                            width: 100%;
+                            height: 100%;
+                            mouse-cursor: pointer;
+                            clicked => { root.active-view = "home"; }
+                        }
 
                         if root.active-view == "home" : Rectangle {
                             x: 0px;
@@ -727,11 +815,6 @@ export component AppWindow inherits Window {
                                 font-weight: root.active-view == "home" ? 700 : 500;
                                 vertical-alignment: center;
                             }
-                        }
-
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { root.active-view = "home"; }
                         }
                     }
 
@@ -768,6 +851,19 @@ export component AppWindow inherits Window {
                                     border-radius: 10px;
                                     background: transparent;
 
+                                    mon-ta := TouchArea {
+                                        width: 100%;
+                                        height: 100%;
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.selected-monitor-index = idx;
+                                            root.sync-current-values();
+                                            if (root.active-view != "profiles") {
+                                                root.active-view = "dashboard";
+                                            }
+                                        }
+                                    }
+
                                     // Alone Neon Glow esterno quando il monitor è selezionato
                                     if mon-entry.is-mon-active && root.glow-style != "none" : Rectangle {
                                         x: -2px;
@@ -780,14 +876,19 @@ export component AppWindow inherits Window {
                                         border-color: root.accent-main.with-alpha(0.45);
                                     }
 
-                                    // Card interna del monitor
+                                    // Card interna del monitor con hover & selezione animata a molla
                                     Rectangle {
                                         width: 100%;
                                         height: 100%;
                                         border-radius: 9px;
-                                        background: mon-entry.is-mon-active ? #2b303c : transparent;
-                                        border-width: mon-entry.is-mon-active ? (root.glow-style == "intense" ? 2px : 1.5px) : 0px;
-                                        border-color: root.accent-main;
+                                        background: mon-entry.is-mon-active ? #2b303c : (mon-ta.has-hover ? #222631 : transparent);
+                                        border-width: mon-entry.is-mon-active ? (root.glow-style == "intense" ? 2px : 1.5px) : (mon-ta.has-hover ? 1px : 0px);
+                                        border-color: mon-entry.is-mon-active ? root.accent-main : (mon-ta.has-hover ? root.accent-main.with-alpha(0.35) : transparent);
+
+                                        animate background, border-color {
+                                            duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                        }
 
                                         HorizontalLayout {
                                             padding-left: 12px;
@@ -826,92 +927,106 @@ export component AppWindow inherits Window {
                                             }
                                         }
                                     }
-
-                                    TouchArea {
-                                        mouse-cursor: pointer;
-                                        clicked => {
-                                            root.selected-monitor-index = idx;
-                                            root.sync-current-values();
-                                            if (root.active-view != "profiles") {
-                                                root.active-view = "dashboard";
-                                            }
-                                        }
-                                    }
                                 }
 
-                                // --- SOTTO-ELENCO ACCORDION (Dashboard & Profili Colore) ---
-                                if mon-entry.is-mon-active : VerticalLayout {
-                                    padding-left: 18px;
-                                    padding-right: 4px;
-                                    spacing: 4px;
+                                // --- SOTTO-ELENCO ACCORDION (Dashboard & Profili Colore) CON APERTURA A MOLLA ---
+                                accordion-box := Rectangle {
+                                    clip: true;
+                                    height: mon-entry.is-mon-active ? 72px : 0px;
+                                    opacity: mon-entry.is-mon-active ? 1.0 : 0.0;
 
-                                    // Sotto-voce 1: Dashboard
-                                    Rectangle {
-                                        height: 32px;
-                                        border-radius: 6px;
-                                        background: root.active-view == "dashboard" ? root.accent-main.with-alpha(0.20) : #21252e;
-                                        border-width: 1px;
-                                        border-color: root.active-view == "dashboard" ? root.accent-main : #2d323e;
-
-                                        HorizontalLayout {
-                                            padding-left: 10px;
-                                            padding-right: 10px;
-                                            spacing: 8px;
-                                            alignment: start;
-
-                                            Text {
-                                                text: "↳ ⊞";
-                                                color: root.active-view == "dashboard" ? root.accent-main : #9da5b4;
-                                                font-size: 11px;
-                                                vertical-alignment: center;
-                                            }
-                                            Text {
-                                                text: "Dashboard";
-                                                color: root.active-view == "dashboard" ? #ffffff : #c3c9d5;
-                                                font-size: 12px;
-                                                font-weight: root.active-view == "dashboard" ? 600 : 500;
-                                                vertical-alignment: center;
-                                            }
-                                        }
-
-                                        TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => { root.active-view = "dashboard"; }
-                                        }
+                                    animate height {
+                                        duration: SpringTheme.animations-enabled ? 240ms : 0ms;
+                                        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                    }
+                                    animate opacity {
+                                        duration: SpringTheme.animations-enabled ? 200ms : 0ms;
+                                        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
                                     }
 
-                                    // Sotto-voce 2: Profili Colore
-                                    Rectangle {
-                                        height: 32px;
-                                        border-radius: 6px;
-                                        background: root.active-view == "profiles" ? root.accent-main.with-alpha(0.20) : #21252e;
-                                        border-width: 1px;
-                                        border-color: root.active-view == "profiles" ? root.accent-main : #2d323e;
+                                    VerticalLayout {
+                                        padding-left: 18px;
+                                        padding-right: 4px;
+                                        spacing: 4px;
 
-                                        HorizontalLayout {
-                                            padding-left: 10px;
-                                            padding-right: 10px;
-                                            spacing: 8px;
-                                            alignment: start;
+                                        // Sotto-voce 1: Dashboard
+                                        Rectangle {
+                                            height: 32px;
+                                            border-radius: 6px;
+                                            background: root.active-view == "dashboard" ? root.accent-main.with-alpha(0.20) : (dash-ta.has-hover ? #282d38 : #21252e);
+                                            border-width: 1px;
+                                            border-color: root.active-view == "dashboard" ? root.accent-main : (dash-ta.has-hover ? root.accent-main.with-alpha(0.3) : #2d323e);
 
-                                            Text {
-                                                text: "↳ ◐";
-                                                color: root.active-view == "profiles" ? root.accent-main : #9da5b4;
-                                                font-size: 11px;
-                                                vertical-alignment: center;
+                                            animate background, border-color {
+                                                duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                                                easing: cubic-bezier(0.34, 1.4, 0.64, 1);
                                             }
-                                            Text {
-                                                text: root.is-en ? "Color Profiles" : "Profili Colore";
-                                                color: root.active-view == "profiles" ? #ffffff : #c3c9d5;
-                                                font-size: 12px;
-                                                font-weight: root.active-view == "profiles" ? 600 : 500;
-                                                vertical-alignment: center;
+
+                                            HorizontalLayout {
+                                                padding-left: 10px;
+                                                padding-right: 10px;
+                                                spacing: 8px;
+                                                alignment: start;
+
+                                                Text {
+                                                    text: "↳ ⊞";
+                                                    color: root.active-view == "dashboard" ? root.accent-main : #9da5b4;
+                                                    font-size: 11px;
+                                                    vertical-alignment: center;
+                                                }
+                                                Text {
+                                                    text: "Dashboard";
+                                                    color: root.active-view == "dashboard" ? #ffffff : #c3c9d5;
+                                                    font-size: 12px;
+                                                    font-weight: root.active-view == "dashboard" ? 600 : 500;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+
+                                            dash-ta := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.active-view = "dashboard"; }
                                             }
                                         }
 
-                                        TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => { root.active-view = "profiles"; }
+                                        // Sotto-voce 2: Profili Colore
+                                        Rectangle {
+                                            height: 32px;
+                                            border-radius: 6px;
+                                            background: root.active-view == "profiles" ? root.accent-main.with-alpha(0.20) : (prof-ta.has-hover ? #282d38 : #21252e);
+                                            border-width: 1px;
+                                            border-color: root.active-view == "profiles" ? root.accent-main : (prof-ta.has-hover ? root.accent-main.with-alpha(0.3) : #2d323e);
+
+                                            animate background, border-color {
+                                                duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                                                easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                            }
+
+                                            HorizontalLayout {
+                                                padding-left: 10px;
+                                                padding-right: 10px;
+                                                spacing: 8px;
+                                                alignment: start;
+
+                                                Text {
+                                                    text: "↳ ◐";
+                                                    color: root.active-view == "profiles" ? root.accent-main : #9da5b4;
+                                                    font-size: 11px;
+                                                    vertical-alignment: center;
+                                                }
+                                                Text {
+                                                    text: root.is-en ? "Color Profiles" : "Profili Colore";
+                                                    color: root.active-view == "profiles" ? #ffffff : #c3c9d5;
+                                                    font-size: 12px;
+                                                    font-weight: root.active-view == "profiles" ? 600 : 500;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+
+                                            prof-ta := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.active-view = "profiles"; }
+                                            }
                                         }
                                     }
                                 }
@@ -933,9 +1048,21 @@ export component AppWindow inherits Window {
                             Rectangle {
                                 height: 38px;
                                 border-radius: 8px;
-                                background: root.active-view == "reorder" ? #2f3441 : transparent;
-                                border-width: root.active-view == "reorder" ? 1px : 0px;
-                                border-color: root.active-view == "reorder" ? root.accent-main : transparent;
+                                background: root.active-view == "reorder" ? #2f3441 : (reorder-ta.has-hover ? #242833 : transparent);
+                                border-width: root.active-view == "reorder" ? 1px : (reorder-ta.has-hover ? 1px : 0px);
+                                border-color: root.active-view == "reorder" ? root.accent-main : (reorder-ta.has-hover ? root.accent-main.with-alpha(0.3) : transparent);
+
+                                animate background, border-color {
+                                    duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+                                    easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                }
+
+                                reorder-ta := TouchArea {
+                                    width: 100%;
+                                    height: 100%;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.active-view = "reorder"; }
+                                }
 
                                 HorizontalLayout {
                                     padding-left: 12px;
@@ -958,11 +1085,6 @@ export component AppWindow inherits Window {
                                         vertical-alignment: center;
                                     }
                                 }
-
-                                TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { root.active-view = "reorder"; }
-                                }
                             }
                         }
                     }
@@ -977,7 +1099,21 @@ export component AppWindow inherits Window {
                     Rectangle {
                         height: 40px;
                         border-radius: 8px;
-                        background: root.active-view == "settings" ? #313643 : transparent;
+                        background: root.active-view == "settings" ? #313643 : (settings-ta.has-hover ? #252a36 : transparent);
+                        border-width: root.active-view == "settings" ? 1px : (settings-ta.has-hover ? 1px : 0px);
+                        border-color: root.active-view == "settings" ? root.accent-main.with-alpha(0.5) : (settings-ta.has-hover ? root.accent-main.with-alpha(0.3) : transparent);
+
+                        animate background, border-color {
+                            duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                        }
+
+                        settings-ta := TouchArea {
+                            width: 100%;
+                            height: 100%;
+                            mouse-cursor: pointer;
+                            clicked => { root.active-view = "settings"; }
+                        }
 
                         if root.active-view == "settings" : Rectangle {
                             x: 0px;
@@ -1006,11 +1142,6 @@ export component AppWindow inherits Window {
                                 font-weight: root.active-view == "settings" ? 600 : 500;
                                 vertical-alignment: center;
                             }
-                        }
-
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { root.active-view = "settings"; }
                         }
                     }
                 }
@@ -1095,6 +1226,11 @@ export component AppWindow inherits Window {
                                         border-top-left-radius: 7px;
                                         border-bottom-left-radius: 7px;
 
+                                        animate background {
+                                            duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                        }
+
                                         Rectangle {
                                             width: 10px;
                                             height: 2px;
@@ -1114,6 +1250,11 @@ export component AppWindow inherits Window {
                                     max-btn := Rectangle {
                                         horizontal-stretch: 1;
                                         background: max-ta.has-hover ? #00000028 : transparent;
+
+                                        animate background {
+                                            duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                        }
 
                                         Rectangle {
                                             width: 10px;
@@ -1138,6 +1279,11 @@ export component AppWindow inherits Window {
                                         background: cls-ta.has-hover ? #c5221f : transparent;
                                         border-top-right-radius: 7px;
                                         border-bottom-right-radius: 7px;
+
+                                        animate background {
+                                            duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                        }
 
                                         Path {
                                             width: 10px;
@@ -1181,8 +1327,11 @@ export component AppWindow inherits Window {
                             // ========================================================
                             // VISTA 0: HOME — PANORAMICA RAPIDA MONITOR AFFIANCATI
                             // ========================================================
-                            if root.active-view == "home" : VerticalLayout {
-                                spacing: 16px;
+                            SpringViewContainer {
+                                is-active: root.active-view == "home";
+
+                                VerticalLayout {
+                                    spacing: 16px;
 
                                 // Header Sezione Home
                                 Rectangle {
@@ -1237,13 +1386,23 @@ export component AppWindow inherits Window {
                                     spacing: 16px;
                                     alignment: start;
 
-                                    for mon[m-idx] in root.monitors : Rectangle {
+                                    for mon[m-idx] in root.monitors : mon-block := Rectangle {
                                         min-width: 330px;
                                         horizontal-stretch: 1;
                                         border-radius: 12px;
-                                        background: #21252e;
+                                        background: block-ta.has-hover ? #252a35 : #21252e;
                                         border-width: 1px;
-                                        border-color: #2d323e;
+                                        border-color: block-ta.has-hover ? root.accent-main.with-alpha(0.55) : #2d323e;
+
+                                        animate background, border-color {
+                                            duration: SpringTheme.animations-enabled ? 200ms : 0ms;
+                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                        }
+
+                                        block-ta := TouchArea {
+                                            width: 100%;
+                                            height: 100%;
+                                        }
 
                                         VerticalLayout {
                                             padding: 18px;
@@ -1400,13 +1559,18 @@ export component AppWindow inherits Window {
                                                 }
                                             }
 
-                                            // Pulsante Azione: Apri Dettagli Monitor
+                                            // Pulsante Azione: Apri Dettagli Monitor con rimbalzo a molla
                                             Rectangle {
                                                 height: 36px;
                                                 border-radius: 8px;
-                                                background: #2a303d;
+                                                background: btn-ta.has-hover ? root.accent-main : #2a303d;
                                                 border-width: 1px;
-                                                border-color: #384050;
+                                                border-color: btn-ta.has-hover ? root.accent-main : #384050;
+
+                                                animate background, border-color {
+                                                    duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                                                    easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                                }
 
                                                 HorizontalLayout {
                                                     alignment: center;
@@ -1420,7 +1584,7 @@ export component AppWindow inherits Window {
                                                     }
                                                 }
 
-                                                TouchArea {
+                                                btn-ta := TouchArea {
                                                     mouse-cursor: pointer;
                                                     clicked => {
                                                         root.selected-monitor-index = m-idx;
@@ -1433,12 +1597,16 @@ export component AppWindow inherits Window {
                                     }
                                 }
                             }
+                            }
 
                             // ========================================================
                             // VISTA 1: DASHBOARD PRINCIPALE (Come nel Mockup!)
                             // ========================================================
-                            if root.active-view == "dashboard" : VerticalLayout {
-                                spacing: root.is-compact ? 12px : 16px;
+                            SpringViewContainer {
+                                is-active: root.active-view == "dashboard";
+
+                                VerticalLayout {
+                                    spacing: root.is-compact ? 12px : 16px;
 
                                 // 1. HERO HEADER CARD (Monitor Name, DDC/CI Active Badge, Spec Chip, 270° Arc Gauge)
                                 Rectangle {
@@ -1748,12 +1916,16 @@ export component AppWindow inherits Window {
                                     }
                                 }
                             }
+                            }
 
                             // ========================================================
                             // VISTA 2: COLOR PROFILES, TEMPERATURA COLORE, AUDIO & INPUT
                             // ========================================================
-                            if root.active-view == "profiles" : VerticalLayout {
-                                spacing: 14px;
+                            SpringViewContainer {
+                                is-active: root.active-view == "profiles";
+
+                                VerticalLayout {
+                                    spacing: 14px;
 
                                 // Header Monitor Selezionato
                                 Rectangle {
@@ -1946,12 +2118,16 @@ export component AppWindow inherits Window {
                                     }
                                 }
                             }
+                            }
 
                             // ========================================================
                             // VISTA 3: ORDINA MONITOR (Gestione Ordine & Priorità)
                             // ========================================================
-                            if root.active-view == "reorder" : VerticalLayout {
-                                spacing: 14px;
+                            SpringViewContainer {
+                                is-active: root.active-view == "reorder";
+
+                                VerticalLayout {
+                                    spacing: 14px;
 
                                 Rectangle {
                                     height: 58px;
@@ -2121,12 +2297,16 @@ export component AppWindow inherits Window {
                                     }
                                 }
                             }
+                            }
 
                             // ========================================================
                             // VISTA 4: IMPOSTAZIONI (Organizzate in 4 Card Tematiche)
                             // ========================================================
-                            if root.active-view == "settings" : VerticalLayout {
-                                spacing: 14px;
+                            SpringViewContainer {
+                                is-active: root.active-view == "settings";
+
+                                VerticalLayout {
+                                    spacing: 14px;
 
                                 // CARD 1: SISTEMA & COMPORTAMENTO
                                 Rectangle {
@@ -2361,6 +2541,33 @@ export component AppWindow inherits Window {
                                                 toggled(v) => { root.toggle-acrylic(v); }
                                             }
                                         }
+
+                                        // Animazioni Fluide a Molla (Spring animations)
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            VerticalLayout {
+                                                alignment: center;
+                                                spacing: 2px;
+                                                Text {
+                                                    text: root.is-en ? "Fluid Spring Animations" : "Animazioni Fluide a Molla";
+                                                    color: #ffffff;
+                                                    font-size: 13px;
+                                                    font-weight: 600;
+                                                }
+                                                Text {
+                                                    text: root.is-en
+                                                        ? "Reactive spring bounce on sliders, views & cards (disable to save RAM & CPU)"
+                                                        : "Transizioni e controlli elastici reattivi (disattiva per massime prestazioni e zero RAM)";
+                                                    color: #8c95a6;
+                                                    font-size: 11px;
+                                                }
+                                            }
+                                            TitaniumToggle {
+                                                checked <=> root.animations-enabled;
+                                                accent: root.accent-main;
+                                                toggled(v) => { root.save-settings(); }
+                                            }
+                                        }
                                     }
                                 }
 
@@ -2533,6 +2740,7 @@ export component AppWindow inherits Window {
                                     }
                                 }
                             }
+                            }
                         }
                     }
                     }
@@ -2543,10 +2751,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.09 (DARK MATTE TITANIUM & ACRYLIC)
+// FINESTRA INSTALLER SETUP v1.11 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.09";
+    title: "Installazione Monitor Manager v1.11";
     preferred-width: 520px;
     preferred-height: 410px;
     background: transparent;
