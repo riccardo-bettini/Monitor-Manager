@@ -158,11 +158,40 @@ impl DdcEngine {
     }
 
     /// Scansiona tutti i monitor fisici collegati e legge i loro valori VCP attuali
+    #[allow(dead_code)]
     pub fn scan_monitors(&self) -> Vec<MonitorInfo> {
-        let discovered = enumerate_all_monitors();
+        self.scan_monitors_ordered(&[])
+    }
+
+    /// Scansiona tutti i monitor fisici collegati ordinandoli in base alla lista salvata
+    pub fn scan_monitors_ordered(&self, preferred_order: &[String]) -> Vec<MonitorInfo> {
+        let mut discovered = enumerate_all_monitors();
+        if !preferred_order.is_empty() {
+            discovered.sort_by_key(|m| {
+                let key = format!("{} {}", m.info.brand, m.info.name);
+                preferred_order
+                    .iter()
+                    .position(|o| o == &key || o == &m.info.name)
+                    .unwrap_or(usize::MAX)
+            });
+        }
         let mut guard = self.monitors.lock().unwrap();
         *guard = discovered;
         guard.iter().map(|m| m.info.clone()).collect()
+    }
+
+    /// Sposta un monitor nell'ordine personalizzato e restituisce la lista aggiornata
+    pub fn reorder_monitors(&self, from_idx: usize, to_idx: usize) -> Vec<MonitorInfo> {
+        let mut guard = self.monitors.lock().unwrap();
+        if from_idx < guard.len() && to_idx < guard.len() {
+            guard.swap(from_idx, to_idx);
+        }
+        guard.iter().map(|m| m.info.clone()).collect()
+    }
+
+    /// Restituisce il numero di monitor fisici rilevati
+    pub fn monitor_count(&self) -> usize {
+        self.monitors.lock().unwrap().len()
     }
 
     /// Restituisce l'elenco dei monitor attualmente in cache senza attendere il bus I2C

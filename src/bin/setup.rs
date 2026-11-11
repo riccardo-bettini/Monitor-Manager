@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 
-const APP_VERSION: &str = "1.06";
+const APP_VERSION: &str = "1.07";
 const APP_NAME: &str = "Monitor Manager";
 const PAYLOAD_EXE: &[u8] = include_bytes!("../../target/release/monitor-manager.exe");
 

@@ -352,8 +352,8 @@ export component AppWindow inherits Window {
         }
     ];
     in-out property <int> selected-monitor-index: 0;
-    // "dashboard" | "profiles" | "multi" | "settings"
-    in-out property <string> active-view: "dashboard";
+    // "home" | "dashboard" | "profiles" | "reorder" | "settings"
+    in-out property <string> active-view: "home";
 
     // Proprietà reattive dirette per slider ultra-reattivi (zero delay, zero freeze)
     in-out property <int> current-brightness: 75;
@@ -400,10 +400,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.06";
-    in-out property <string> update-status-text: "Monitor Manager v1.06 (Dark Matte Titanium)";
+    in-out property <string> app-version: "1.07";
+    in-out property <string> update-status-text: "Monitor Manager v1.07 (Dark Matte Titanium)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.06";
+    in-out property <string> latest-version: "1.07";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -417,6 +417,7 @@ export component AppWindow inherits Window {
     callback minimize-window();
     callback toggle-maximize-window();
     callback close-window();
+    callback move-monitor(int /* index */, int /* direction: -1 up, 1 down */);
 
     // --- Palette Colori Reattive ---
     property <bool> is-en: root.lang == "en";
@@ -604,90 +605,231 @@ export component AppWindow inherits Window {
                         }
                     }
 
-                    // Spazio prima della lista monitor
-                    Rectangle { height: 4px; background: transparent; }
+                    // Spazio prima del menu
+                    Rectangle { height: 6px; background: transparent; }
 
-                    // --- LISTA MONITOR HARDWARE COLLEGATI (con Neon Glow sul monitor attivo) ---
+                    // --- VOCE HOME IN CIMA (Panoramica Rapida a Blocchi) ---
+                    Rectangle {
+                        height: 40px;
+                        border-radius: 9px;
+                        background: root.active-view == "home" ? #2f3441 : transparent;
+                        border-width: root.active-view == "home" ? 1px : 0px;
+                        border-color: root.active-view == "home" ? root.accent-main.with-alpha(0.5) : transparent;
+
+                        if root.active-view == "home" : Rectangle {
+                            x: 0px;
+                            y: 10px;
+                            width: 3px;
+                            height: 20px;
+                            border-radius: 1.5px;
+                            background: root.accent-main;
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 10px;
+                            alignment: start;
+
+                            Text {
+                                text: "⌂";
+                                color: root.active-view == "home" ? root.accent-main : #9da5b4;
+                                font-size: 15px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: root.is-en ? "Home · Overview" : "Home · Panoramica";
+                                color: root.active-view == "home" ? #ffffff : #c3c9d5;
+                                font-size: 13px;
+                                font-weight: root.active-view == "home" ? 700 : 500;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.active-view = "home"; }
+                        }
+                    }
+
+                    // Intestazione sezione monitor
+                    Rectangle {
+                        height: 18px;
+                        background: transparent;
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            Text {
+                                text: root.is-en ? "DISPLAYS" : "MONITOR COLLEGATI";
+                                color: #6f788a;
+                                font-size: 10px;
+                                font-weight: 700;
+                                letter-spacing: 0.8px;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    // --- LISTA MONITOR HARDWARE COLLEGATI (con Accordion per Monitor Attivo) ---
                     Flickable {
                         vertical-stretch: 1;
                         VerticalLayout {
                             spacing: 6px;
                             alignment: start;
 
-                            for mon[idx] in root.monitors : mon-card := Rectangle {
-                                property <bool> is-sel: idx == root.selected-monitor-index && root.active-view != "multi" && root.active-view != "settings";
+                            for mon[idx] in root.monitors : mon-entry := VerticalLayout {
+                                spacing: 3px;
+                                property <bool> is-mon-active: idx == root.selected-monitor-index && (root.active-view == "dashboard" || root.active-view == "profiles");
 
-                                height: 44px;
-                                border-radius: 10px;
-                                background: transparent;
+                                mon-card := Rectangle {
+                                    height: 44px;
+                                    border-radius: 10px;
+                                    background: transparent;
 
-                                // Alone Neon Glow esterno quando il monitor è selezionato
-                                if mon-card.is-sel && root.glow-style != "none" : Rectangle {
-                                    x: -2px;
-                                    y: -2px;
-                                    width: parent.width + 4px;
-                                    height: parent.height + 4px;
-                                    border-radius: 12px;
-                                    background: root.accent-main.with-alpha(root.glow-style == "intense" ? 0.30 : 0.16);
-                                    border-width: 1px;
-                                    border-color: root.accent-main.with-alpha(0.45);
-                                }
+                                    // Alone Neon Glow esterno quando il monitor è selezionato
+                                    if mon-entry.is-mon-active && root.glow-style != "none" : Rectangle {
+                                        x: -2px;
+                                        y: -2px;
+                                        width: parent.width + 4px;
+                                        height: parent.height + 4px;
+                                        border-radius: 12px;
+                                        background: root.accent-main.with-alpha(root.glow-style == "intense" ? 0.30 : 0.16);
+                                        border-width: 1px;
+                                        border-color: root.accent-main.with-alpha(0.45);
+                                    }
 
-                                // Card interna del monitor
-                                Rectangle {
-                                    width: 100%;
-                                    height: 100%;
-                                    border-radius: 9px;
-                                    background: mon-card.is-sel ? #2b303c : transparent;
-                                    border-width: mon-card.is-sel ? (root.glow-style == "intense" ? 2px : 1.5px) : 0px;
-                                    border-color: root.accent-main;
-
-                                    HorizontalLayout {
-                                        padding-left: 12px;
-                                        padding-right: 12px;
-                                        spacing: 10px;
-                                        alignment: space-between;
+                                    // Card interna del monitor
+                                    Rectangle {
+                                        width: 100%;
+                                        height: 100%;
+                                        border-radius: 9px;
+                                        background: mon-entry.is-mon-active ? #2b303c : transparent;
+                                        border-width: mon-entry.is-mon-active ? (root.glow-style == "intense" ? 2px : 1.5px) : 0px;
+                                        border-color: root.accent-main;
 
                                         HorizontalLayout {
+                                            padding-left: 12px;
+                                            padding-right: 12px;
                                             spacing: 10px;
-                                            alignment: start;
+                                            alignment: space-between;
 
-                                            // Icona Display stilizzata
-                                            Text {
-                                                text: "▭";
-                                                color: mon-card.is-sel ? #ffffff : #9da5b4;
-                                                font-size: 14px;
-                                                vertical-alignment: center;
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                alignment: start;
+
+                                                Text {
+                                                    text: "▭";
+                                                    color: mon-entry.is-mon-active ? #ffffff : #9da5b4;
+                                                    font-size: 14px;
+                                                    vertical-alignment: center;
+                                                }
+
+                                                Text {
+                                                    text: mon.name;
+                                                    color: mon-entry.is-mon-active ? #ffffff : #c3c9d5;
+                                                    font-size: 12.5px;
+                                                    font-weight: mon-entry.is-mon-active ? 600 : 500;
+                                                    overflow: elide;
+                                                    vertical-alignment: center;
+                                                }
                                             }
 
-                                            Text {
-                                                text: mon.name;
-                                                color: mon-card.is-sel ? #ffffff : #c3c9d5;
-                                                font-size: 12.5px;
-                                                font-weight: mon-card.is-sel ? 600 : 500;
-                                                overflow: elide;
-                                                vertical-alignment: center;
+                                            // Pallino LED attivo a destra
+                                            if mon-entry.is-mon-active : Rectangle {
+                                                width: 8px;
+                                                height: 8px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 4px;
+                                                background: root.accent-main;
                                             }
                                         }
+                                    }
 
-                                        // Pallino LED attivo a destra (come nel mockup)
-                                        if mon-card.is-sel : Rectangle {
-                                            width: 8px;
-                                            height: 8px;
-                                            y: (parent.height - self.height) / 2;
-                                            border-radius: 4px;
-                                            background: root.accent-main;
+                                    TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.selected-monitor-index = idx;
+                                            root.sync-current-values();
+                                            if (root.active-view != "profiles") {
+                                                root.active-view = "dashboard";
+                                            }
                                         }
                                     }
                                 }
 
-                                TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => {
-                                        root.selected-monitor-index = idx;
-                                        root.sync-current-values();
-                                        if (root.active-view == "multi" || root.active-view == "settings") {
-                                            root.active-view = "dashboard";
+                                // --- SOTTO-ELENCO ACCORDION (Dashboard & Profili Colore) ---
+                                if mon-entry.is-mon-active : VerticalLayout {
+                                    padding-left: 18px;
+                                    padding-right: 4px;
+                                    spacing: 4px;
+
+                                    // Sotto-voce 1: Dashboard
+                                    Rectangle {
+                                        height: 32px;
+                                        border-radius: 6px;
+                                        background: root.active-view == "dashboard" ? root.accent-main.with-alpha(0.20) : #21252e;
+                                        border-width: 1px;
+                                        border-color: root.active-view == "dashboard" ? root.accent-main : #2d323e;
+
+                                        HorizontalLayout {
+                                            padding-left: 10px;
+                                            padding-right: 10px;
+                                            spacing: 8px;
+                                            alignment: start;
+
+                                            Text {
+                                                text: "↳ ⊞";
+                                                color: root.active-view == "dashboard" ? root.accent-main : #9da5b4;
+                                                font-size: 11px;
+                                                vertical-alignment: center;
+                                            }
+                                            Text {
+                                                text: "Dashboard";
+                                                color: root.active-view == "dashboard" ? #ffffff : #c3c9d5;
+                                                font-size: 12px;
+                                                font-weight: root.active-view == "dashboard" ? 600 : 500;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.active-view = "dashboard"; }
+                                        }
+                                    }
+
+                                    // Sotto-voce 2: Profili Colore
+                                    Rectangle {
+                                        height: 32px;
+                                        border-radius: 6px;
+                                        background: root.active-view == "profiles" ? root.accent-main.with-alpha(0.20) : #21252e;
+                                        border-width: 1px;
+                                        border-color: root.active-view == "profiles" ? root.accent-main : #2d323e;
+
+                                        HorizontalLayout {
+                                            padding-left: 10px;
+                                            padding-right: 10px;
+                                            spacing: 8px;
+                                            alignment: start;
+
+                                            Text {
+                                                text: "↳ ◐";
+                                                color: root.active-view == "profiles" ? root.accent-main : #9da5b4;
+                                                font-size: 11px;
+                                                vertical-alignment: center;
+                                            }
+                                            Text {
+                                                text: root.is-en ? "Color Profiles" : "Profili Colore";
+                                                color: root.active-view == "profiles" ? #ffffff : #c3c9d5;
+                                                font-size: 12px;
+                                                font-weight: root.active-view == "profiles" ? 600 : 500;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.active-view = "profiles"; }
                                         }
                                     }
                                 }
@@ -695,21 +837,23 @@ export component AppWindow inherits Window {
 
                             // Separatore sottile
                             Rectangle {
-                                height: 14px;
+                                height: 12px;
                                 background: transparent;
                                 Rectangle {
-                                    y: 7px;
+                                    y: 6px;
                                     height: 1px;
                                     width: 100%;
                                     background: #323744;
                                 }
                             }
 
-                            // Voce rapida: Tutti i Monitor Affiancati / Sync
+                            // Voce rapida: Ordina Monitor (Gestione Ordine)
                             Rectangle {
                                 height: 38px;
                                 border-radius: 8px;
-                                background: root.active-view == "multi" ? #2f3441 : transparent;
+                                background: root.active-view == "reorder" ? #2f3441 : transparent;
+                                border-width: root.active-view == "reorder" ? 1px : 0px;
+                                border-color: root.active-view == "reorder" ? root.accent-main : transparent;
 
                                 HorizontalLayout {
                                     padding-left: 12px;
@@ -718,23 +862,24 @@ export component AppWindow inherits Window {
                                     alignment: start;
 
                                     Text {
-                                        text: "⊞";
-                                        color: root.active-view == "multi" ? root.accent-main : #9da5b4;
-                                        font-size: 14px;
+                                        text: "⇅";
+                                        color: root.active-view == "reorder" ? root.accent-main : #9da5b4;
+                                        font-size: 15px;
+                                        font-weight: 700;
                                         vertical-alignment: center;
                                     }
                                     Text {
-                                        text: root.is-en ? "All Monitors View" : "Tutti i Monitor";
-                                        color: root.active-view == "multi" ? #ffffff : #c3c9d5;
+                                        text: root.is-en ? "Reorder Displays" : "Ordina Monitor";
+                                        color: root.active-view == "reorder" ? #ffffff : #c3c9d5;
                                         font-size: 12.5px;
-                                        font-weight: root.active-view == "multi" ? 600 : 500;
+                                        font-weight: root.active-view == "reorder" ? 600 : 500;
                                         vertical-alignment: center;
                                     }
                                 }
 
                                 TouchArea {
                                     mouse-cursor: pointer;
-                                    clicked => { root.active-view = "multi"; }
+                                    clicked => { root.active-view = "reorder"; }
                                 }
                             }
                         }
@@ -746,132 +891,44 @@ export component AppWindow inherits Window {
                         background: #323744;
                     }
 
-                    // --- MENU DI NAVIGAZIONE INFERIORE (Dashboard, Color Profiles, Settings) ---
-                    VerticalLayout {
-                        spacing: 4px;
+                    // --- MENU INFERIORE (Solo Impostazioni) ---
+                    Rectangle {
+                        height: 40px;
+                        border-radius: 8px;
+                        background: root.active-view == "settings" ? #313643 : transparent;
 
-                        // 1. Dashboard
-                        Rectangle {
-                            height: 38px;
-                            border-radius: 8px;
-                            background: root.active-view == "dashboard" ? #313643 : transparent;
+                        if root.active-view == "settings" : Rectangle {
+                            x: 0px;
+                            y: 10px;
+                            width: 3px;
+                            height: 20px;
+                            border-radius: 1.5px;
+                            background: root.accent-main;
+                        }
 
-                            // Barra verticale d'accento a sinistra quando attivo (come nel mockup)
-                            if root.active-view == "dashboard" : Rectangle {
-                                x: 0px;
-                                y: 9px;
-                                width: 3px;
-                                height: 20px;
-                                border-radius: 1.5px;
-                                background: root.accent-main;
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 10px;
+                            alignment: start;
+                            Text {
+                                text: "⚙";
+                                color: root.active-view == "settings" ? #ffffff : #9da5b4;
+                                font-size: 15px;
+                                vertical-alignment: center;
                             }
-
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                spacing: 10px;
-                                alignment: start;
-                                Text {
-                                    text: "⊞";
-                                    color: root.active-view == "dashboard" ? #ffffff : #9da5b4;
-                                    font-size: 14px;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    text: "Dashboard";
-                                    color: root.active-view == "dashboard" ? #ffffff : #c3c9d5;
-                                    font-size: 13px;
-                                    font-weight: root.active-view == "dashboard" ? 600 : 500;
-                                    vertical-alignment: center;
-                                }
-                            }
-
-                            TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => { root.active-view = "dashboard"; }
+                            Text {
+                                text: root.is-en ? "Settings" : "Impostazioni";
+                                color: root.active-view == "settings" ? #ffffff : #c3c9d5;
+                                font-size: 13px;
+                                font-weight: root.active-view == "settings" ? 600 : 500;
+                                vertical-alignment: center;
                             }
                         }
 
-                        // 2. Color Profiles / Extra Controls
-                        Rectangle {
-                            height: 38px;
-                            border-radius: 8px;
-                            background: root.active-view == "profiles" ? #313643 : transparent;
-
-                            if root.active-view == "profiles" : Rectangle {
-                                x: 0px;
-                                y: 9px;
-                                width: 3px;
-                                height: 20px;
-                                border-radius: 1.5px;
-                                background: root.accent-main;
-                            }
-
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                spacing: 10px;
-                                alignment: start;
-                                Text {
-                                    text: "◐";
-                                    color: root.active-view == "profiles" ? #ffffff : #9da5b4;
-                                    font-size: 14px;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    text: root.is-en ? "Color Profiles" : "Profili Colore";
-                                    color: root.active-view == "profiles" ? #ffffff : #c3c9d5;
-                                    font-size: 13px;
-                                    font-weight: root.active-view == "profiles" ? 600 : 500;
-                                    vertical-alignment: center;
-                                }
-                            }
-
-                            TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => { root.active-view = "profiles"; }
-                            }
-                        }
-
-                        // 3. Settings / Impostazioni
-                        Rectangle {
-                            height: 38px;
-                            border-radius: 8px;
-                            background: root.active-view == "settings" ? #313643 : transparent;
-
-                            if root.active-view == "settings" : Rectangle {
-                                x: 0px;
-                                y: 9px;
-                                width: 3px;
-                                height: 20px;
-                                border-radius: 1.5px;
-                                background: root.accent-main;
-                            }
-
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                spacing: 10px;
-                                alignment: start;
-                                Text {
-                                    text: "⚙";
-                                    color: root.active-view == "settings" ? #ffffff : #9da5b4;
-                                    font-size: 14px;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    text: root.is-en ? "Settings" : "Impostazioni";
-                                    color: root.active-view == "settings" ? #ffffff : #c3c9d5;
-                                    font-size: 13px;
-                                    font-weight: root.active-view == "settings" ? 600 : 500;
-                                    vertical-alignment: center;
-                                }
-                            }
-
-                            TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => { root.active-view = "settings"; }
-                            }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.active-view = "settings"; }
                         }
                     }
                 }
@@ -1097,6 +1154,224 @@ export component AppWindow inherits Window {
                             padding-bottom: 18px;
                             spacing: root.is-compact ? 12px : 16px;
                             alignment: start;
+
+                            // ========================================================
+                            // VISTA 0: HOME — PANORAMICA RAPIDA MONITOR AFFIANCATI
+                            // ========================================================
+                            if root.active-view == "home" : VerticalLayout {
+                                spacing: 16px;
+
+                                // Header Sezione Home
+                                Rectangle {
+                                    height: 58px;
+                                    border-radius: 12px;
+                                    background: #21252e;
+                                    border-width: 1px;
+                                    border-color: #2d323e;
+
+                                    HorizontalLayout {
+                                        padding-left: 20px;
+                                        padding-right: 20px;
+                                        alignment: space-between;
+
+                                        VerticalLayout {
+                                            alignment: center;
+                                            spacing: 3px;
+                                            Text {
+                                                text: root.is-en ? "Displays Overview · Quick Controls" : "Panoramica Display · Controlli Rapidi";
+                                                color: #ffffff;
+                                                font-size: 16px;
+                                                font-weight: 700;
+                                            }
+                                            Text {
+                                                text: root.is-en
+                                                    ? "Adjust brightness & contrast instantly across your connected screens."
+                                                    : "Regola al volo luminosità e contrasto di tutti i display collegati.";
+                                                color: #9da5b4;
+                                                font-size: 11px;
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            spacing: 10px;
+                                            TitaniumChip {
+                                                text: root.sync-monitors ? (root.is-en ? "✓ Sync Enabled" : "✓ Sync Attivo") : (root.is-en ? "⇄ Sync All" : "⇄ Sincronizza Tutti");
+                                                active: root.sync-monitors;
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => {
+                                                    root.sync-monitors = !root.sync-monitors;
+                                                    root.save-settings();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Blocchi affiancati dei monitor (disposizione orizzontale reattiva)
+                                HorizontalLayout {
+                                    spacing: 16px;
+                                    alignment: start;
+
+                                    for mon[m-idx] in root.monitors : Rectangle {
+                                        min-width: 330px;
+                                        horizontal-stretch: 1;
+                                        border-radius: 12px;
+                                        background: #21252e;
+                                        border-width: 1px;
+                                        border-color: #2d323e;
+
+                                        VerticalLayout {
+                                            padding: 18px;
+                                            spacing: 14px;
+
+                                            // Intestazione Blocco Monitor
+                                            HorizontalLayout {
+                                                alignment: space-between;
+                                                VerticalLayout {
+                                                    spacing: 4px;
+                                                    alignment: start;
+                                                    Text {
+                                                        text: mon.name;
+                                                        color: #ffffff;
+                                                        font-size: 16px;
+                                                        font-weight: 700;
+                                                    }
+                                                    HorizontalLayout {
+                                                        spacing: 6px;
+                                                        alignment: start;
+                                                        Rectangle {
+                                                            width: 7px;
+                                                            height: 7px;
+                                                            y: (parent.height - self.height) / 2;
+                                                            border-radius: 3.5px;
+                                                            background: mon.ddc-supported ? #39d353 : #f59e0b;
+                                                        }
+                                                        Text {
+                                                            text: mon.ddc-supported ? "DDC/CI Attivo" : "Modalità Software";
+                                                            color: mon.ddc-supported ? #39d353 : #f59e0b;
+                                                            font-size: 11px;
+                                                            font-weight: 600;
+                                                        }
+                                                    }
+                                                }
+
+                                                // Pill Risoluzione / Info
+                                                Rectangle {
+                                                    height: 24px;
+                                                    border-radius: 6px;
+                                                    background: #1b1e27;
+                                                    border-width: 1px;
+                                                    border-color: #2c3240;
+                                                    HorizontalLayout {
+                                                        padding-left: 8px;
+                                                        padding-right: 8px;
+                                                        Text {
+                                                            text: mon.resolution;
+                                                            color: #9da5b4;
+                                                            font-size: 11px;
+                                                            font-weight: 600;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Slider Rapidi Luminosità & Contrasto
+                                            VerticalLayout {
+                                                spacing: 10px;
+
+                                                // Luminosità
+                                                VerticalLayout {
+                                                    spacing: 4px;
+                                                    HorizontalLayout {
+                                                        alignment: space-between;
+                                                        Text {
+                                                            text: root.is-en ? "Brightness" : "Luminosità";
+                                                            color: #c5cbd6;
+                                                            font-size: 12px;
+                                                            font-weight: 600;
+                                                        }
+                                                        Text {
+                                                            text: "\{mon.brightness}%";
+                                                            color: root.accent-main;
+                                                            font-size: 12px;
+                                                            font-weight: 700;
+                                                        }
+                                                    }
+                                                    NeonSlider {
+                                                        value: mon.brightness;
+                                                        minimum: 0;
+                                                        maximum: mon.brightness-max;
+                                                        track-color: root.accent-main;
+                                                        glow-style: root.glow-style;
+                                                        changed(v) => { root.set-vcp(mon.id, 16, v); }
+                                                    }
+                                                }
+
+                                                // Contrasto
+                                                VerticalLayout {
+                                                    spacing: 4px;
+                                                    HorizontalLayout {
+                                                        alignment: space-between;
+                                                        Text {
+                                                            text: root.is-en ? "Contrast" : "Contrasto";
+                                                            color: #c5cbd6;
+                                                            font-size: 12px;
+                                                            font-weight: 600;
+                                                        }
+                                                        Text {
+                                                            text: "\{mon.contrast}%";
+                                                            color: root.accent-main;
+                                                            font-size: 12px;
+                                                            font-weight: 700;
+                                                        }
+                                                    }
+                                                    NeonSlider {
+                                                        value: mon.contrast;
+                                                        minimum: 0;
+                                                        maximum: mon.contrast-max;
+                                                        track-color: root.accent-main;
+                                                        glow-style: root.glow-style;
+                                                        changed(v) => { root.set-vcp(mon.id, 18, v); }
+                                                    }
+                                                }
+                                            }
+
+                                            // Pulsante Azione: Apri Dettagli Monitor
+                                            Rectangle {
+                                                height: 36px;
+                                                border-radius: 8px;
+                                                background: #2a303d;
+                                                border-width: 1px;
+                                                border-color: #384050;
+
+                                                HorizontalLayout {
+                                                    alignment: center;
+                                                    spacing: 6px;
+                                                    Text {
+                                                        text: root.is-en ? "Monitor Details & RGB ➔" : "Dettagli Monitor & RGB ➔";
+                                                        color: #ffffff;
+                                                        font-size: 12px;
+                                                        font-weight: 600;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+
+                                                TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => {
+                                                        root.selected-monitor-index = m-idx;
+                                                        root.sync-current-values();
+                                                        root.active-view = "dashboard";
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             // ========================================================
                             // VISTA 1: DASHBOARD PRINCIPALE (Come nel Mockup!)
@@ -1609,90 +1884,173 @@ export component AppWindow inherits Window {
                             }
 
                             // ========================================================
-                            // VISTA 3: TUTTI I MONITOR AFFIANCATI
+                            // VISTA 3: ORDINA MONITOR (Gestione Ordine & Priorità)
                             // ========================================================
-                            if root.active-view == "multi" : VerticalLayout {
-                                spacing: 12px;
+                            if root.active-view == "reorder" : VerticalLayout {
+                                spacing: 14px;
 
-                                for mon[m-idx] in root.monitors : Rectangle {
+                                Rectangle {
+                                    height: 58px;
                                     border-radius: 12px;
                                     background: #21252e;
                                     border-width: 1px;
                                     border-color: #2d323e;
 
-                                    VerticalLayout {
-                                        padding: 18px;
-                                        spacing: 12px;
+                                    HorizontalLayout {
+                                        padding-left: 20px;
+                                        padding-right: 20px;
+                                        alignment: space-between;
 
-                                        HorizontalLayout {
-                                            alignment: space-between;
-                                            HorizontalLayout {
-                                                spacing: 10px;
-                                                Rectangle {
-                                                    width: 8px;
-                                                    height: 8px;
-                                                    y: (parent.height - self.height) / 2;
-                                                    border-radius: 4px;
-                                                    background: mon.ddc-supported ? #39d353 : #f59e0b;
-                                                }
-                                                Text {
-                                                    text: "\{mon.name} (\{mon.brand} · \{mon.resolution})";
-                                                    color: #f3f5f9;
-                                                    font-size: 15px;
-                                                    font-weight: 700;
-                                                }
+                                        VerticalLayout {
+                                            alignment: center;
+                                            spacing: 3px;
+                                            Text {
+                                                text: root.is-en ? "Displays Order · Priority Setup" : "Ordinamento & Priorità Monitor";
+                                                color: #ffffff;
+                                                font-size: 16px;
+                                                font-weight: 700;
                                             }
-
-                                            TitaniumChip {
-                                                text: root.is-en ? "Open Dashboard" : "Apri Dashboard";
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => {
-                                                    root.selected-monitor-index = m-idx;
-                                                    root.sync-current-values();
-                                                    root.active-view = "dashboard";
-                                                }
+                                            Text {
+                                                text: root.is-en
+                                                    ? "Change display priority. The sequence here updates the sidebar and Home immediately."
+                                                    : "Modifica l'ordine dei monitor. L'elenco qui definito gestisce la sequenza nella barra laterale e nella Home.";
+                                                color: #9da5b4;
+                                                font-size: 11px;
                                             }
                                         }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    spacing: 10px;
+
+                                    for mon[m-idx] in root.monitors : Rectangle {
+                                        height: 68px;
+                                        border-radius: 12px;
+                                        background: #21252e;
+                                        border-width: 1px;
+                                        border-color: #2d323e;
 
                                         HorizontalLayout {
-                                            spacing: 16px;
-                                            VerticalLayout {
-                                                horizontal-stretch: 1;
-                                                spacing: 4px;
-                                                Text {
-                                                    text: root.is-en
-                                                        ? "Brightness: \{mon.brightness}%"
-                                                        : "Luminosità: \{mon.brightness}%";
-                                                    color: #c5cbd6;
-                                                    font-size: 12px;
+                                            padding-left: 20px;
+                                            padding-right: 20px;
+                                            alignment: space-between;
+
+                                            HorizontalLayout {
+                                                spacing: 16px;
+                                                alignment: start;
+
+                                                // Badge posizione numerica (#1, #2...)
+                                                Rectangle {
+                                                    width: 34px;
+                                                    height: 34px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    border-radius: 8px;
+                                                    background: root.accent-main.with-alpha(0.20);
+                                                    border-width: 1px;
+                                                    border-color: root.accent-main;
+
+                                                    Text {
+                                                        text: "#\{m-idx + 1}";
+                                                        color: root.accent-main;
+                                                        font-size: 13px;
+                                                        font-weight: 700;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                    }
                                                 }
-                                                NeonSlider {
-                                                    value: mon.brightness;
-                                                    minimum: 0;
-                                                    maximum: mon.brightness-max;
-                                                    track-color: root.accent-main;
-                                                    glow-style: root.glow-style;
-                                                    changed(v) => { root.set-vcp(mon.id, 16, v); }
+
+                                                VerticalLayout {
+                                                    alignment: center;
+                                                    spacing: 4px;
+
+                                                    Text {
+                                                        text: mon.name;
+                                                        color: #ffffff;
+                                                        font-size: 15px;
+                                                        font-weight: 700;
+                                                    }
+                                                    Text {
+                                                        text: mon.ddc-supported
+                                                            ? "\{mon.brand} · \{mon.resolution} · DDC/CI Attivo"
+                                                            : "\{mon.brand} · \{mon.resolution} · Software Mode";
+                                                        color: #9da5b4;
+                                                        font-size: 11px;
+                                                    }
                                                 }
                                             }
-                                            VerticalLayout {
-                                                horizontal-stretch: 1;
-                                                spacing: 4px;
-                                                Text {
-                                                    text: root.is-en
-                                                        ? "Contrast: \{mon.contrast}%"
-                                                        : "Contrasto: \{mon.contrast}%";
-                                                    color: #c5cbd6;
-                                                    font-size: 12px;
+
+                                            // Pulsanti Sposta Su / Sposta Giù
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                alignment: center;
+
+                                                // Tasto Sposta Su
+                                                Rectangle {
+                                                    width: 110px;
+                                                    height: 34px;
+                                                    border-radius: 7px;
+                                                    background: m-idx > 0 ? #2a303d : #1c2028;
+                                                    border-width: 1px;
+                                                    border-color: m-idx > 0 ? #384052 : #252a35;
+
+                                                    HorizontalLayout {
+                                                        alignment: center;
+                                                        spacing: 6px;
+                                                        Text {
+                                                            text: "▲";
+                                                            color: m-idx > 0 ? root.accent-main : #555c6d;
+                                                            font-size: 10px;
+                                                            vertical-alignment: center;
+                                                        }
+                                                        Text {
+                                                            text: root.is-en ? "Move Up" : "Sposta Su";
+                                                            color: m-idx > 0 ? #ffffff : #555c6d;
+                                                            font-size: 12px;
+                                                            font-weight: 600;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+
+                                                    TouchArea {
+                                                        enabled: m-idx > 0;
+                                                        mouse-cursor: m-idx > 0 ? pointer : default;
+                                                        clicked => { root.move-monitor(m-idx, -1); }
+                                                    }
                                                 }
-                                                NeonSlider {
-                                                    value: mon.contrast;
-                                                    minimum: 0;
-                                                    maximum: mon.contrast-max;
-                                                    track-color: root.accent-main;
-                                                    glow-style: root.glow-style;
-                                                    changed(v) => { root.set-vcp(mon.id, 18, v); }
+
+                                                // Tasto Sposta Giù
+                                                Rectangle {
+                                                    width: 115px;
+                                                    height: 34px;
+                                                    border-radius: 7px;
+                                                    background: m-idx < root.monitors.length - 1 ? #2a303d : #1c2028;
+                                                    border-width: 1px;
+                                                    border-color: m-idx < root.monitors.length - 1 ? #384052 : #252a35;
+
+                                                    HorizontalLayout {
+                                                        alignment: center;
+                                                        spacing: 6px;
+                                                        Text {
+                                                            text: "▼";
+                                                            color: m-idx < root.monitors.length - 1 ? root.accent-main : #555c6d;
+                                                            font-size: 10px;
+                                                            vertical-alignment: center;
+                                                        }
+                                                        Text {
+                                                            text: root.is-en ? "Move Down" : "Sposta Giù";
+                                                            color: m-idx < root.monitors.length - 1 ? #ffffff : #555c6d;
+                                                            font-size: 12px;
+                                                            font-weight: 600;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+
+                                                    TouchArea {
+                                                        enabled: m-idx < root.monitors.length - 1;
+                                                        mouse-cursor: m-idx < root.monitors.length - 1 ? pointer : default;
+                                                        clicked => { root.move-monitor(m-idx, 1); }
+                                                    }
                                                 }
                                             }
                                         }
@@ -1701,12 +2059,12 @@ export component AppWindow inherits Window {
                             }
 
                             // ========================================================
-                            // VISTA 4: SETTINGS / IMPOSTAZIONI (Zero Impatto RAM)
+                            // VISTA 4: IMPOSTAZIONI (Organizzate in 4 Card Tematiche)
                             // ========================================================
                             if root.active-view == "settings" : VerticalLayout {
                                 spacing: 14px;
 
-                                // CATEGORIA 1: PERSONALIZZAZIONE STILE "DARK MATTE TITANIUM"
+                                // CARD 1: SISTEMA & COMPORTAMENTO
                                 Rectangle {
                                     border-radius: 12px;
                                     background: #21252e;
@@ -1718,19 +2076,88 @@ export component AppWindow inherits Window {
                                         spacing: 14px;
 
                                         Text {
-                                            text: root.is-en
-                                                ? "🎨 Dark Matte Titanium Customization (Zero RAM Impact)"
-                                                : "🎨 Personalizzazione Dark Matte Titanium (Zero Impatto RAM)";
-                                            color: #f3f5f9;
+                                            text: root.is-en ? "💻 System & Behavior" : "💻 Sistema & Comportamento";
+                                            color: #ffffff;
                                             font-size: 15px;
                                             font-weight: 700;
                                         }
 
-                                        // 1. Palette Colore d'Accento
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            Text {
+                                                text: root.is-en
+                                                    ? "Start automatically with Windows (minimized to System Tray)"
+                                                    : "Avvia automaticamente all'avvio di Windows (in background)";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                vertical-alignment: center;
+                                            }
+                                            TitaniumToggle {
+                                                checked <=> root.start-with-windows;
+                                                accent: root.accent-main;
+                                                toggled => { root.save-settings(); }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            Text {
+                                                text: root.is-en
+                                                    ? "Minimize to System Tray on close (X) (~2-6 MB RAM in Gaming)"
+                                                    : "Riduci nella System Tray alla chiusura (X) (~2-6 MB RAM)";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                vertical-alignment: center;
+                                            }
+                                            TitaniumToggle {
+                                                checked <=> root.close-to-tray;
+                                                accent: root.accent-main;
+                                                toggled => { root.save-settings(); }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            Text {
+                                                text: root.is-en
+                                                    ? "Synchronize adjustments across all connected displays"
+                                                    : "Sincronizza le modifiche su tutti i monitor collegati (Sync All)";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                vertical-alignment: center;
+                                            }
+                                            TitaniumToggle {
+                                                checked <=> root.sync-monitors;
+                                                accent: root.accent-main;
+                                                toggled => { root.save-settings(); }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // CARD 2: ASPETTO & PERSONALIZZAZIONE CYBERPUNK
+                                Rectangle {
+                                    border-radius: 12px;
+                                    background: #21252e;
+                                    border-width: 1px;
+                                    border-color: #2d323e;
+
+                                    VerticalLayout {
+                                        padding: 20px;
+                                        spacing: 14px;
+
+                                        Text {
+                                            text: root.is-en ? "🎨 Cyberpunk Style & Accent Theme" : "🎨 Aspetto & Personalizzazione Cyberpunk";
+                                            color: #ffffff;
+                                            font-size: 15px;
+                                            font-weight: 700;
+                                        }
+
+                                        // Palette Colore d'Accento
                                         Text {
                                             text: root.is-en ? "Accent Color Palette" : "Palette Colore d'Accento";
-                                            color: #c5cbd6;
-                                            font-size: 12.5px;
+                                            color: #9da5b4;
+                                            font-size: 12px;
                                             font-weight: 600;
                                         }
 
@@ -1778,11 +2205,11 @@ export component AppWindow inherits Window {
                                             }
                                         }
 
-                                        // 2. Stile Glow dei Bordi
+                                        // Intensità Bagliore Neon
                                         Text {
-                                            text: root.is-en ? "Active Border & Slider Glow" : "Stile Glow Bordi & Monitor Attivo";
-                                            color: #c5cbd6;
-                                            font-size: 12.5px;
+                                            text: root.is-en ? "Active Border & Slider Glow Intensity" : "Intensità Bagliore Neon (Bordi & Cursori)";
+                                            color: #9da5b4;
+                                            font-size: 12px;
                                             font-weight: 600;
                                         }
 
@@ -1790,7 +2217,7 @@ export component AppWindow inherits Window {
                                             spacing: 10px;
                                             TitaniumChip {
                                                 horizontal-stretch: 1;
-                                                text: root.is-en ? "Minimal / Off" : "Spento / Minimal";
+                                                text: root.is-en ? "Minimal / Off" : "Disattivato / Minimal";
                                                 active: root.glow-style == "none";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
@@ -1798,7 +2225,7 @@ export component AppWindow inherits Window {
                                             }
                                             TitaniumChip {
                                                 horizontal-stretch: 1;
-                                                text: root.is-en ? "Subtle Glow (Default)" : "Sottile (Predefinito)";
+                                                text: root.is-en ? "Subtle (Default)" : "Sottile (Predefinito)";
                                                 active: root.glow-style == "subtle";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
@@ -1806,7 +2233,7 @@ export component AppWindow inherits Window {
                                             }
                                             TitaniumChip {
                                                 horizontal-stretch: 1;
-                                                text: root.is-en ? "Intense Gaming Neon" : "Marcato (Gaming Neon)";
+                                                text: root.is-en ? "Intense Gaming Neon" : "Intenso (Gaming Neon)";
                                                 active: root.glow-style == "intense";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
@@ -1814,74 +2241,37 @@ export component AppWindow inherits Window {
                                             }
                                         }
 
-                                        // 3. Densità Layout & Lingua Bilingue (IT / EN)
+                                        // Densità Layout
+                                        Text {
+                                            text: root.is-en ? "Layout Density" : "Densità Spaziatura Layout";
+                                            color: #9da5b4;
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                        }
+
                                         HorizontalLayout {
-                                            spacing: 18px;
-
-                                            VerticalLayout {
+                                            spacing: 10px;
+                                            TitaniumChip {
                                                 horizontal-stretch: 1;
-                                                spacing: 8px;
-                                                Text {
-                                                    text: root.is-en ? "Layout Density" : "Densità Layout";
-                                                    color: #c5cbd6;
-                                                    font-size: 12.5px;
-                                                    font-weight: 600;
-                                                }
-                                                HorizontalLayout {
-                                                    spacing: 8px;
-                                                    TitaniumChip {
-                                                        horizontal-stretch: 1;
-                                                        text: "Standard";
-                                                        active: root.layout-density == "standard";
-                                                        accent: root.accent-main;
-                                                        glow-style: root.glow-style;
-                                                        clicked => { root.layout-density = "standard"; root.save-settings(); }
-                                                    }
-                                                    TitaniumChip {
-                                                        horizontal-stretch: 1;
-                                                        text: root.is-en ? "Compact" : "Compatto";
-                                                        active: root.layout-density == "compact";
-                                                        accent: root.accent-main;
-                                                        glow-style: root.glow-style;
-                                                        clicked => { root.layout-density = "compact"; root.save-settings(); }
-                                                    }
-                                                }
+                                                text: root.is-en ? "Comfort (Standard)" : "Comodo (Standard)";
+                                                active: root.layout-density == "standard";
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.layout-density = "standard"; root.save-settings(); }
                                             }
-
-                                            VerticalLayout {
+                                            TitaniumChip {
                                                 horizontal-stretch: 1;
-                                                spacing: 8px;
-                                                Text {
-                                                    text: root.is-en ? "Interface Language" : "Lingua Interfaccia";
-                                                    color: #c5cbd6;
-                                                    font-size: 12.5px;
-                                                    font-weight: 600;
-                                                }
-                                                HorizontalLayout {
-                                                    spacing: 8px;
-                                                    TitaniumChip {
-                                                        horizontal-stretch: 1;
-                                                        text: "🇮🇹 Italiano";
-                                                        active: root.lang == "it";
-                                                        accent: root.accent-main;
-                                                        glow-style: root.glow-style;
-                                                        clicked => { root.lang = "it"; root.save-settings(); }
-                                                    }
-                                                    TitaniumChip {
-                                                        horizontal-stretch: 1;
-                                                        text: "🇬🇧 English";
-                                                        active: root.lang == "en";
-                                                        accent: root.accent-main;
-                                                        glow-style: root.glow-style;
-                                                        clicked => { root.lang = "en"; root.save-settings(); }
-                                                    }
-                                                }
+                                                text: root.is-en ? "Compact" : "Compatto";
+                                                active: root.layout-density == "compact";
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.layout-density = "compact"; root.save-settings(); }
                                             }
                                         }
                                     }
                                 }
 
-                                // CATEGORIA 2: SISTEMA, BACKGROUND GAMING & AUTO-UPDATER GITHUB
+                                // CARD 3: HARDWARE DDC/CI & LINGUA
                                 Rectangle {
                                     border-radius: 12px;
                                     background: #21252e;
@@ -1890,13 +2280,11 @@ export component AppWindow inherits Window {
 
                                     VerticalLayout {
                                         padding: 20px;
-                                        spacing: 12px;
+                                        spacing: 14px;
 
                                         Text {
-                                            text: root.is-en
-                                                ? "⚙ System, Gaming Tray & GitHub Updates"
-                                                : "⚙ Sistema, Modalità Gaming & Aggiornamenti GitHub";
-                                            color: #f3f5f9;
+                                            text: root.is-en ? "🌐 Hardware DDC/CI & Language" : "🌐 Hardware DDC/CI & Lingua";
+                                            color: #ffffff;
                                             font-size: 15px;
                                             font-weight: 700;
                                         }
@@ -1904,15 +2292,43 @@ export component AppWindow inherits Window {
                                         HorizontalLayout {
                                             alignment: space-between;
                                             Text {
+                                                text: root.is-en ? "Interface Language" : "Lingua dell'Interfaccia";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                vertical-alignment: center;
+                                            }
+
+                                            HorizontalLayout {
+                                                spacing: 8px;
+                                                TitaniumChip {
+                                                    text: "🇮🇹 Italiano";
+                                                    active: root.lang == "it";
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.lang = "it"; root.save-settings(); }
+                                                }
+                                                TitaniumChip {
+                                                    text: "🇬🇧 English";
+                                                    active: root.lang == "en";
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.lang = "en"; root.save-settings(); }
+                                                }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            Text {
                                                 text: root.is-en
-                                                    ? "Minimize to System Tray on close (~2-6 MB RAM in Gaming)"
-                                                    : "Riduci nella System Tray alla chiusura (~2-6 MB RAM in Gaming)";
+                                                    ? "Hide controls unsupported by DDC/CI hardware"
+                                                    : "Nascondi controlli non supportati dall'hardware";
                                                 color: #c5cbd6;
                                                 font-size: 13px;
                                                 vertical-alignment: center;
                                             }
                                             TitaniumToggle {
-                                                checked <=> root.close-to-tray;
+                                                checked <=> root.hide-unsupported;
                                                 accent: root.accent-main;
                                                 toggled => { root.save-settings(); }
                                             }
@@ -1922,34 +2338,38 @@ export component AppWindow inherits Window {
                                             alignment: space-between;
                                             Text {
                                                 text: root.is-en
-                                                    ? "Start automatically with Windows (minimized)"
-                                                    : "Avvia automaticamente con Windows (minimizzato)";
-                                                color: #c5cbd6;
-                                                font-size: 13px;
+                                                    ? "Rescan display bus and re-detect hardware monitors"
+                                                    : "Esegui una nuova scansione dei monitor collegati";
+                                                color: #9da5b4;
+                                                font-size: 12px;
                                                 vertical-alignment: center;
                                             }
-                                            TitaniumToggle {
-                                                checked <=> root.start-with-windows;
+                                            TitaniumChip {
+                                                text: root.is-en ? "↻ Rescan Hardware Now" : "↻ Rileva Monitor Ora";
                                                 accent: root.accent-main;
-                                                toggled => { root.save-settings(); }
+                                                glow-style: root.glow-style;
+                                                clicked => { root.rescan-monitors(); }
                                             }
                                         }
+                                    }
+                                }
 
-                                        HorizontalLayout {
-                                            alignment: space-between;
-                                            Text {
-                                                text: root.is-en
-                                                    ? "Synchronize changes across all connected monitors"
-                                                    : "Sincronizza le modifiche su tutti i monitor collegati";
-                                                color: #c5cbd6;
-                                                font-size: 13px;
-                                                vertical-alignment: center;
-                                            }
-                                            TitaniumToggle {
-                                                checked <=> root.sync-monitors;
-                                                accent: root.accent-main;
-                                                toggled => { root.save-settings(); }
-                                            }
+                                // CARD 4: SOFTWARE & AGGIORNAMENTI GITHUB
+                                Rectangle {
+                                    border-radius: 12px;
+                                    background: #21252e;
+                                    border-width: 1px;
+                                    border-color: #2d323e;
+
+                                    VerticalLayout {
+                                        padding: 20px;
+                                        spacing: 14px;
+
+                                        Text {
+                                            text: root.is-en ? "🚀 Software Updates & Application Info" : "🚀 Aggiornamenti Software & Informazioni";
+                                            color: #ffffff;
+                                            font-size: 15px;
+                                            font-weight: 700;
                                         }
 
                                         HorizontalLayout {
@@ -1969,7 +2389,6 @@ export component AppWindow inherits Window {
                                             }
                                         }
 
-                                        // Riga Versione + Azioni Updater & Uscita
                                         Rectangle {
                                             height: 1px;
                                             background: #2e3340;
@@ -1977,17 +2396,28 @@ export component AppWindow inherits Window {
 
                                         HorizontalLayout {
                                             alignment: space-between;
-                                            Text {
-                                                text: root.update-status-text;
-                                                color: #9da5b4;
-                                                font-size: 12px;
-                                                vertical-alignment: center;
+                                            VerticalLayout {
+                                                spacing: 2px;
+                                                alignment: center;
+                                                Text {
+                                                    text: root.update-status-text;
+                                                    color: #e9edf5;
+                                                    font-size: 13px;
+                                                    font-weight: 600;
+                                                }
+                                                Text {
+                                                    text: "Ultra-Lightweight Rust Engine · Slint Native UI";
+                                                    color: #9da5b4;
+                                                    font-size: 11px;
+                                                }
                                             }
 
                                             HorizontalLayout {
                                                 spacing: 8px;
+                                                alignment: center;
+
                                                 TitaniumChip {
-                                                    text: root.is-en ? "Check GitHub Release" : "Verifica Aggiornamenti";
+                                                    text: root.is-en ? "Check Updates" : "Verifica Aggiornamenti";
                                                     accent: root.accent-main;
                                                     glow-style: root.glow-style;
                                                     clicked => { root.check-updates(); }
@@ -2019,10 +2449,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.06 (DARK MATTE TITANIUM)
+// FINESTRA INSTALLER SETUP v1.07 (DARK MATTE TITANIUM)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.06";
+    title: "Installazione Monitor Manager v1.07";
     preferred-width: 520px;
     preferred-height: 410px;
     background: #171a21;
@@ -2033,7 +2463,7 @@ export component SetupWindow inherits Window {
     in-out property <bool> opt-launch: true;
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.06 (Dark Matte Titanium)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.07 (Dark Matte Titanium)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -2057,7 +2487,7 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.06";
+                        text: "Monitor Manager v1.07";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
@@ -2144,7 +2574,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione..." : "Installa v1.06 Ora";
+                    text: root.installing ? "Installazione..." : "Installa v1.07 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;

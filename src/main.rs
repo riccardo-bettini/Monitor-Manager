@@ -241,6 +241,7 @@ fn main() {
     // Gestione Menu System Tray
     let ui_weak_menu = ui.as_weak();
     let ddc_menu = Arc::clone(&ddc_engine);
+    let settings_menu = Arc::clone(&settings_state);
     MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
         if event.id == open_id {
             let uw = ui_weak_menu.clone();
@@ -252,8 +253,10 @@ fn main() {
         } else if event.id == rescan_id {
             let uw = ui_weak_menu.clone();
             let ddc_c = Arc::clone(&ddc_menu);
+            let s_c = Arc::clone(&settings_menu);
             thread::spawn(move || {
-                let list = ddc_c.scan_monitors();
+                let order = s_c.lock().unwrap().monitor_order.clone();
+                let list = ddc_c.scan_monitors_ordered(&order);
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(u) = uw.upgrade() {
                         let vec_ui: Vec<UiMonitor> = list.iter().map(to_ui_monitor).collect();
@@ -403,12 +406,15 @@ fn main() {
 
     // Callback: Rescan Monitor
     let ddc_rescan = Arc::clone(&ddc_engine);
+    let settings_rescan = Arc::clone(&settings_state);
     let ui_weak_rescan = ui.as_weak();
     ui.on_rescan_monitors(move || {
         let ddc_c = Arc::clone(&ddc_rescan);
+        let s_c = Arc::clone(&settings_rescan);
         let uw = ui_weak_rescan.clone();
         thread::spawn(move || {
-            let list = ddc_c.scan_monitors();
+            let order = s_c.lock().unwrap().monitor_order.clone();
+            let list = ddc_c.scan_monitors_ordered(&order);
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(u) = uw.upgrade() {
                     let vec_ui: Vec<UiMonitor> = list.iter().map(to_ui_monitor).collect();
@@ -416,6 +422,41 @@ fn main() {
                     u.invoke_sync_current_values();
                 }
             });
+        });
+    });
+
+    // Callback: Riordina Monitor (Su / Giù)
+    let ddc_move = Arc::clone(&ddc_engine);
+    let settings_move = Arc::clone(&settings_state);
+    let ui_weak_move = ui.as_weak();
+    ui.on_move_monitor(move |idx, dir| {
+        let idx = idx as usize;
+        let ddc_c = Arc::clone(&ddc_move);
+        let settings_c = Arc::clone(&settings_move);
+        let uw = ui_weak_move.clone();
+
+        let max_len = ddc_c.monitor_count();
+        let new_idx = if dir < 0 {
+            if idx > 0 { idx - 1 } else { return; }
+        } else {
+            if idx + 1 < max_len { idx + 1 } else { return; }
+        };
+
+        let updated = ddc_c.reorder_monitors(idx, new_idx);
+        let order: Vec<String> = updated.iter().map(|m| format!("{} {}", m.brand, m.name)).collect();
+        {
+            let mut s = settings_c.lock().unwrap();
+            s.monitor_order = order;
+            let _ = s.save();
+        }
+
+        let vec_ui: Vec<UiMonitor> = updated.iter().map(to_ui_monitor).collect();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(u) = uw.upgrade() {
+                u.set_monitors(ModelRc::from(Rc::new(VecModel::from(vec_ui))));
+                u.set_selected_monitor_index(new_idx as i32);
+                u.invoke_sync_current_values();
+            }
         });
     });
 
@@ -503,10 +544,11 @@ fn main() {
         let ddc_init = Arc::clone(&ddc_engine);
         let uw_init = ui.as_weak();
         let auto_upd = settings_state.lock().unwrap().auto_check_updates;
+        let order = settings_state.lock().unwrap().monitor_order.clone();
         let dl_init = Arc::clone(&latest_download_url);
 
         thread::spawn(move || {
-            let list = ddc_init.scan_monitors();
+            let list = ddc_init.scan_monitors_ordered(&order);
             let uw_scan = uw_init.clone();
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(u) = uw_scan.upgrade() {

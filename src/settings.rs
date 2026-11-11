@@ -54,6 +54,9 @@ pub struct AppSettings {
     /// Densità del layout: "standard" | "compact"
     #[serde(default = "default_layout_density")]
     pub layout_density: String,
+    /// Elenco ordinato dei monitor per memorizzare l'ordinamento manuale utente
+    #[serde(default)]
+    pub monitor_order: Vec<String>,
 }
 
 impl Default for AppSettings {
@@ -69,6 +72,7 @@ impl Default for AppSettings {
             accent_palette: default_accent_palette(),
             glow_style: default_glow_style(),
             layout_density: default_layout_density(),
+            monitor_order: Vec::new(),
         }
     }
 }
