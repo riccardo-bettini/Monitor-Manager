@@ -1,6 +1,6 @@
 [package]
 name = "monitor-manager"
-version = "1.0.11"
+version = "1.0.12"
 edition = "2021"
 description = "Ultra-Lightweight Native DDC/CI Monitor Manager"
 authors = ["Riccardo Bettini"]
