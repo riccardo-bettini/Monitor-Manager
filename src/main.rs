@@ -8,7 +8,7 @@ slint::include_modules!();
 
 use ddc::{DdcEngine, MonitorInfo};
 use settings::AppSettings;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::env;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -308,11 +308,7 @@ fn main() {
         ui.set_glow_style(SharedString::from(s.glow_style.as_str()));
         ui.set_layout_density(SharedString::from(s.layout_density.as_str()));
         ui.set_layout_mode(SharedString::from(s.layout_mode.as_str()));
-        ui.set_active_view(SharedString::from(if s.layout_mode == "multi" {
-            "multi"
-        } else {
-            "dashboard"
-        }));
+        ui.set_active_view(SharedString::from("home"));
         ui.set_sync_monitors(s.sync_monitors);
         ui.set_hide_unsupported(s.hide_unsupported);
         ui.set_close_to_tray(s.close_to_tray);
@@ -488,6 +484,43 @@ fn main() {
                 value as u32,
                 sync_all,
             );
+
+            // Sincronizza istantaneamente i modelli UI tra tutte le sezioni (Home, Dashboard, Presets)
+            let monitors_rc = u.get_monitors();
+            for i in 0..monitors_rc.row_count() {
+                if let Some(mut row) = monitors_rc.row_data(i) {
+                    if sync_all || row.id == monitor_id {
+                        match vcp_code {
+                            16 => row.brightness = value,
+                            18 => row.contrast = value,
+                            135 => row.sharpness = value,
+                            138 => row.saturation = value,
+                            22 => row.red_gain = value,
+                            24 => row.green_gain = value,
+                            26 => row.blue_gain = value,
+                            20 => row.color_temp = value,
+                            98 => row.volume = value,
+                            96 => row.input_source = value,
+                            _ => {}
+                        }
+                        monitors_rc.set_row_data(i, row);
+
+                        if u.get_selected_monitor_index() == i as i32 {
+                            match vcp_code {
+                                16 => u.set_current_brightness(value),
+                                18 => u.set_current_contrast(value),
+                                135 => u.set_current_sharpness(value),
+                                138 => u.set_current_saturation(value),
+                                22 => u.set_current_red_gain(value),
+                                24 => u.set_current_green_gain(value),
+                                26 => u.set_current_blue_gain(value),
+                                98 => u.set_current_volume(value),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
         }
     });
 
@@ -509,6 +542,23 @@ fn main() {
                 con as u32,
                 sync_all,
             );
+
+            // Sincronizza modelli UI
+            let monitors_rc = u.get_monitors();
+            for i in 0..monitors_rc.row_count() {
+                if let Some(mut row) = monitors_rc.row_data(i) {
+                    if sync_all || row.id == monitor_id {
+                        row.brightness = lum;
+                        row.contrast = con;
+                        monitors_rc.set_row_data(i, row);
+
+                        if u.get_selected_monitor_index() == i as i32 {
+                            u.set_current_brightness(lum);
+                            u.set_current_contrast(con);
+                        }
+                    }
+                }
+            }
         }
     });
 
@@ -521,6 +571,25 @@ fn main() {
             ddc_rgb.set_vcp_value(monitor_id as usize, ddc::VCP_RED_GAIN, 50, sync_all);
             ddc_rgb.set_vcp_value(monitor_id as usize, ddc::VCP_GREEN_GAIN, 50, sync_all);
             ddc_rgb.set_vcp_value(monitor_id as usize, ddc::VCP_BLUE_GAIN, 50, sync_all);
+
+            // Sincronizza modelli UI
+            let monitors_rc = u.get_monitors();
+            for i in 0..monitors_rc.row_count() {
+                if let Some(mut row) = monitors_rc.row_data(i) {
+                    if sync_all || row.id == monitor_id {
+                        row.red_gain = 50;
+                        row.green_gain = 50;
+                        row.blue_gain = 50;
+                        monitors_rc.set_row_data(i, row);
+
+                        if u.get_selected_monitor_index() == i as i32 {
+                            u.set_current_red_gain(50);
+                            u.set_current_green_gain(50);
+                            u.set_current_blue_gain(50);
+                        }
+                    }
+                }
+            }
         }
     });
 

@@ -32,7 +32,7 @@ export struct UiMonitor {
 }
 
 // ============================================================================
-// SLIDER DARK MATTE TITANIUM CON THUMB GLOW E TRACK COLORATA
+// SLIDER DARK MATTE TITANIUM CON THUMB GLOW, TRACK COLORATA, WHEEL E FRECCE TASTIERA
 // ============================================================================
 component NeonSlider inherits Rectangle {
     in-out property <int> value: 50;
@@ -52,73 +52,113 @@ component NeonSlider inherits Rectangle {
         1.0
     );
 
-    // Corsia di fondo scura opaca
-    track-bg := Rectangle {
-        y: (parent.height - self.height) / 2;
-        height: 6px;
-        width: 100%;
-        border-radius: 3px;
-        background: #3c4250;
-
-        // Parte attiva colorata
-        Rectangle {
-            x: 0px;
-            y: 0px;
-            height: 100%;
-            width: parent.width * root.ratio;
-            border-radius: 3px;
-            background: root.enabled ? root.track-color : #555b69;
+    public function step-by(delta: int) {
+        let nv = Math.clamp(root.value + delta, root.minimum, root.maximum);
+        if (nv != root.value) {
+            root.value = nv;
+            root.changed(nv);
         }
     }
 
-    // Alone Glow attorno al cursore (opzionale in base a glow-style, 0 byte RAM extra)
-    if root.enabled && root.glow-style != "none" : Rectangle {
-        width: root.glow-style == "intense" ? 24px : 20px;
-        height: self.width;
-        border-radius: self.width / 2;
-        x: (parent.width - 16px) * root.ratio + 8px - self.width / 2;
-        y: (parent.height - self.height) / 2;
-        background: root.track-color.with-alpha(root.glow-style == "intense" ? 0.35 : 0.20);
-    }
-
-    // Thumb circolare con anello scuro interno come nel mockup
-    Rectangle {
-        width: 16px;
-        height: 16px;
-        border-radius: 8px;
-        x: (parent.width - self.width) * root.ratio;
-        y: (parent.height - self.height) / 2;
-        background: root.enabled ? root.track-color : #6c7382;
-        border-width: 2.5px;
-        border-color: #21252e;
-    }
-
-    ta := TouchArea {
+    fs := FocusScope {
         width: 100%;
         height: 100%;
         enabled: root.enabled;
-        mouse-cursor: root.enabled ? pointer : default;
 
-        function update-from-mouse(mx: length) {
-            if (root.width > 0px) {
-                let r = Math.clamp(mx / root.width, 0.0, 1.0);
-                let nv = Math.round(root.minimum + r * (root.maximum - root.minimum));
-                if (nv != root.value) {
-                    root.value = nv;
-                    root.changed(nv);
+        key-pressed(ev) => {
+            if (ev.text == Key.LeftArrow || ev.text == Key.DownArrow) {
+                root.step-by(-2);
+                return accept;
+            }
+            if (ev.text == Key.RightArrow || ev.text == Key.UpArrow) {
+                root.step-by(2);
+                return accept;
+            }
+            reject
+        }
+
+        // Corsia di fondo scura opaca
+        track-bg := Rectangle {
+            y: (parent.height - self.height) / 2;
+            height: 6px;
+            width: 100%;
+            border-radius: 3px;
+            background: #3c4250;
+
+            // Parte attiva colorata
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                height: 100%;
+                width: parent.width * root.ratio;
+                border-radius: 3px;
+                background: root.enabled ? root.track-color : #555b69;
+            }
+        }
+
+        // Alone Glow attorno al cursore (opzionale in base a glow-style, 0 byte RAM extra)
+        if root.enabled && root.glow-style != "none" : Rectangle {
+            width: root.glow-style == "intense" ? 24px : 20px;
+            height: self.width;
+            border-radius: self.width / 2;
+            x: (parent.width - 16px) * root.ratio + 8px - self.width / 2;
+            y: (parent.height - self.height) / 2;
+            background: root.track-color.with-alpha(root.glow-style == "intense" ? 0.35 : 0.20);
+        }
+
+        // Thumb circolare con anello scuro interno come nel mockup
+        Rectangle {
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            x: (parent.width - self.width) * root.ratio;
+            y: (parent.height - self.height) / 2;
+            background: root.enabled ? root.track-color : #6c7382;
+            border-width: 2.5px;
+            border-color: #21252e;
+        }
+
+        ta := TouchArea {
+            width: 100%;
+            height: 100%;
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+
+            function update-from-mouse(mx: length) {
+                if (root.width > 0px) {
+                    let r = Math.clamp(mx / root.width, 0.0, 1.0);
+                    let nv = Math.round(root.minimum + r * (root.maximum - root.minimum));
+                    if (nv != root.value) {
+                        root.value = nv;
+                        root.changed(nv);
+                    }
                 }
             }
-        }
 
-        pointer-event(ev) => {
-            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
-                self.update-from-mouse(self.mouse-x);
+            pointer-event(ev) => {
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                    fs.focus();
+                    self.update-from-mouse(self.mouse-x);
+                }
             }
-        }
 
-        moved => {
-            if (self.enabled && self.pressed) {
-                self.update-from-mouse(self.mouse-x);
+            moved => {
+                if (self.enabled && self.pressed) {
+                    self.update-from-mouse(self.mouse-x);
+                }
+            }
+
+            scroll-event(ev) => {
+                if (root.enabled) {
+                    fs.focus();
+                    let d = ev.delta-y != 0px
+                        ? (ev.delta-y > 0px ? 2 : -2)
+                        : (ev.delta-x > 0px ? 2 : (ev.delta-x < 0px ? -2 : 0));
+                    if (d != 0) {
+                        root.step-by(d);
+                    }
+                }
+                accept
             }
         }
     }
@@ -137,6 +177,22 @@ component ArcGauge inherits Rectangle {
     width: 124px;
     height: 124px;
     background: transparent;
+
+    ta-gauge := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: pointer;
+        scroll-event(ev) => {
+            let d = ev.delta-y != 0px
+                ? (ev.delta-y > 0px ? 2 : -2)
+                : (ev.delta-x > 0px ? 2 : (ev.delta-x < 0px ? -2 : 0));
+            if (d != 0) {
+                let nv = Math.clamp(root.percentage + d, 0, 100);
+                root.adjusted(nv);
+            }
+            accept
+        }
+    }
 
     // Sfondo interno circolare satinato scuro
     Rectangle {
@@ -203,6 +259,27 @@ component TitaniumStatCard inherits Rectangle {
     background: #21252e;
     border-width: 1px;
     border-color: #2d323e;
+
+    ta-card := TouchArea {
+        width: 100%;
+        height: 100%;
+        enabled: root.supported;
+        scroll-event(ev) => {
+            if (root.supported) {
+                let d = ev.delta-y != 0px
+                    ? (ev.delta-y > 0px ? 2 : -2)
+                    : (ev.delta-x > 0px ? 2 : (ev.delta-x < 0px ? -2 : 0));
+                if (d != 0) {
+                    let nv = Math.clamp(root.value + d, 0, root.maximum);
+                    if (nv != root.value) {
+                        root.value = nv;
+                        root.changed(nv);
+                    }
+                }
+            }
+            accept
+        }
+    }
 
     VerticalLayout {
         padding-left: 16px;
@@ -402,10 +479,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.09";
-    in-out property <string> update-status-text: "Monitor Manager v1.09 (Dark Matte Titanium & Acrylic)";
+    in-out property <string> app-version: "1.10";
+    in-out property <string> update-status-text: "Monitor Manager v1.10 (Dark Matte Titanium & Acrylic)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.09";
+    in-out property <string> latest-version: "1.10";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -1000,13 +1077,13 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            // Blocco Tasti Finestra in alto a destra (Pillola corallo/arancio del mockup con icone definite)
+                            // Blocco Tasti Finestra in alto a destra (Pillola con colore accento dell'app con icone definite)
                             Rectangle {
                                 width: 114px;
                                 height: 30px;
                                 y: 4px;
                                 border-radius: 7px;
-                                background: #f05a46;
+                                background: root.accent-main;
 
                                 HorizontalLayout {
                                     spacing: 0px;
@@ -1229,58 +1306,96 @@ export component AppWindow inherits Window {
                                                 spacing: 10px;
 
                                                 // Luminosità
-                                                VerticalLayout {
-                                                    spacing: 4px;
-                                                    HorizontalLayout {
-                                                        alignment: space-between;
-                                                        Text {
-                                                            text: root.is-en ? "Brightness" : "Luminosità";
-                                                            color: #c5cbd6;
-                                                            font-size: 12px;
-                                                            font-weight: 600;
-                                                        }
-                                                        Text {
-                                                            text: "\{mon.brightness}%";
-                                                            color: root.accent-main;
-                                                            font-size: 12px;
-                                                            font-weight: 700;
+                                                Rectangle {
+                                                    background: transparent;
+                                                    TouchArea {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        scroll-event(ev) => {
+                                                            let d = ev.delta-y != 0px
+                                                                ? (ev.delta-y > 0px ? 2 : -2)
+                                                                : (ev.delta-x > 0px ? 2 : (ev.delta-x < 0px ? -2 : 0));
+                                                            if (d != 0) {
+                                                                let nv = Math.clamp(mon.brightness + d, 0, mon.brightness-max);
+                                                                if (nv != mon.brightness) {
+                                                                    root.set-vcp(mon.id, 16, nv);
+                                                                }
+                                                            }
+                                                            accept
                                                         }
                                                     }
-                                                    NeonSlider {
-                                                        value: mon.brightness;
-                                                        minimum: 0;
-                                                        maximum: mon.brightness-max;
-                                                        track-color: root.accent-main;
-                                                        glow-style: root.glow-style;
-                                                        changed(v) => { root.set-vcp(mon.id, 16, v); }
+                                                    VerticalLayout {
+                                                        spacing: 4px;
+                                                        HorizontalLayout {
+                                                            alignment: space-between;
+                                                            Text {
+                                                                text: root.is-en ? "Brightness" : "Luminosità";
+                                                                color: #c5cbd6;
+                                                                font-size: 12px;
+                                                                font-weight: 600;
+                                                            }
+                                                            Text {
+                                                                text: "\{mon.brightness}%";
+                                                                color: root.accent-main;
+                                                                font-size: 12px;
+                                                                font-weight: 700;
+                                                            }
+                                                        }
+                                                        NeonSlider {
+                                                            value: mon.brightness;
+                                                            minimum: 0;
+                                                            maximum: mon.brightness-max;
+                                                            track-color: root.accent-main;
+                                                            glow-style: root.glow-style;
+                                                            changed(v) => { root.set-vcp(mon.id, 16, v); }
+                                                        }
                                                     }
                                                 }
 
                                                 // Contrasto
-                                                VerticalLayout {
-                                                    spacing: 4px;
-                                                    HorizontalLayout {
-                                                        alignment: space-between;
-                                                        Text {
-                                                            text: root.is-en ? "Contrast" : "Contrasto";
-                                                            color: #c5cbd6;
-                                                            font-size: 12px;
-                                                            font-weight: 600;
-                                                        }
-                                                        Text {
-                                                            text: "\{mon.contrast}%";
-                                                            color: root.accent-main;
-                                                            font-size: 12px;
-                                                            font-weight: 700;
+                                                Rectangle {
+                                                    background: transparent;
+                                                    TouchArea {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        scroll-event(ev) => {
+                                                            let d = ev.delta-y != 0px
+                                                                ? (ev.delta-y > 0px ? 2 : -2)
+                                                                : (ev.delta-x > 0px ? 2 : (ev.delta-x < 0px ? -2 : 0));
+                                                            if (d != 0) {
+                                                                let nv = Math.clamp(mon.contrast + d, 0, mon.contrast-max);
+                                                                if (nv != mon.contrast) {
+                                                                    root.set-vcp(mon.id, 18, nv);
+                                                                }
+                                                            }
+                                                            accept
                                                         }
                                                     }
-                                                    NeonSlider {
-                                                        value: mon.contrast;
-                                                        minimum: 0;
-                                                        maximum: mon.contrast-max;
-                                                        track-color: root.accent-main;
-                                                        glow-style: root.glow-style;
-                                                        changed(v) => { root.set-vcp(mon.id, 18, v); }
+                                                    VerticalLayout {
+                                                        spacing: 4px;
+                                                        HorizontalLayout {
+                                                            alignment: space-between;
+                                                            Text {
+                                                                text: root.is-en ? "Contrast" : "Contrasto";
+                                                                color: #c5cbd6;
+                                                                font-size: 12px;
+                                                                font-weight: 600;
+                                                            }
+                                                            Text {
+                                                                text: "\{mon.contrast}%";
+                                                                color: root.accent-main;
+                                                                font-size: 12px;
+                                                                font-weight: 700;
+                                                            }
+                                                        }
+                                                        NeonSlider {
+                                                            value: mon.contrast;
+                                                            minimum: 0;
+                                                            maximum: mon.contrast-max;
+                                                            track-color: root.accent-main;
+                                                            glow-style: root.glow-style;
+                                                            changed(v) => { root.set-vcp(mon.id, 18, v); }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1423,6 +1538,9 @@ export component AppWindow inherits Window {
                                                 label: root.is-en ? "Brightness" : "Luminosità";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
+                                                adjusted(v) => {
+                                                    root.set-vcp(root.current-monitor.id, 16, Math.round(v * root.current-monitor.brightness-max / 100));
+                                                }
                                             }
                                         }
                                     }
