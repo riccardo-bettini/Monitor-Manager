@@ -36,6 +36,25 @@ fn trim_process_working_set() {
     }
 }
 
+/// Avvia il trascinamento nativo della finestra borderless Windows tramite Win32 HTCAPTION
+fn initiate_native_window_drag() {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetForegroundWindow() -> isize;
+        fn ReleaseCapture() -> i32;
+        fn SendMessageW(hWnd: isize, Msg: u32, wParam: usize, lParam: isize) -> isize;
+    }
+    const WM_NCLBUTTONDOWN: u32 = 0x00A1;
+    const HTCAPTION: usize = 2;
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd != 0 {
+            let _ = ReleaseCapture();
+            let _ = SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        }
+    }
+}
+
 fn generate_app_icon_rgba() -> (Vec<u8>, u32, u32) {
     let w = 32u32;
     let h = 32u32;
@@ -53,10 +72,10 @@ fn generate_app_icon_rgba() -> (Vec<u8>, u32, u32) {
                     || ((dx - 11.5).powi(2) + (dy - 11.5).powi(2)).sqrt() <= 3.2)
             {
                 let t = (x + y) as f32 / 64.0;
-                // Gradiente Coral Sunset
-                let r = (223.0 * (1.0 - t) + 184.0 * t) as u8;
-                let g = (75.0 * (1.0 - t) + 50.0 * t) as u8;
-                let b = (59.0 * (1.0 - t) + 39.0 * t) as u8;
+                // Sfondo Dark Matte Titanium con accento Coral Neon
+                let r = (36.0 * (1.0 - t) + 24.0 * t) as u8;
+                let g = (41.0 * (1.0 - t) + 27.0 * t) as u8;
+                let b = (52.0 * (1.0 - t) + 35.0 * t) as u8;
                 rgba[idx] = r;
                 rgba[idx + 1] = g;
                 rgba[idx + 2] = b;
@@ -68,9 +87,9 @@ fn generate_app_icon_rgba() -> (Vec<u8>, u32, u32) {
                 let in_stand_base = y == 24 && (x >= 11 && x <= 20);
 
                 if in_screen_border || in_stand_neck || in_stand_base {
-                    rgba[idx] = 255;
-                    rgba[idx + 1] = 255;
-                    rgba[idx + 2] = 255;
+                    rgba[idx] = 240;
+                    rgba[idx + 1] = 90;
+                    rgba[idx + 2] = 70;
                     rgba[idx + 3] = 255;
                 }
             }
@@ -199,9 +218,10 @@ fn main() {
     {
         let s = settings_state.lock().unwrap();
         ui.set_app_version(SharedString::from(APP_VERSION));
-        ui.set_theme_pref(SharedString::from(s.theme.as_str()));
-        ui.set_dark_mode(s.effective_dark_mode());
+        ui.set_lang(SharedString::from(s.language.as_str()));
         ui.set_accent_palette(SharedString::from(s.accent_palette.as_str()));
+        ui.set_glow_style(SharedString::from(s.glow_style.as_str()));
+        ui.set_layout_density(SharedString::from(s.layout_density.as_str()));
         ui.set_layout_mode(SharedString::from(s.layout_mode.as_str()));
         ui.set_active_view(SharedString::from(if s.layout_mode == "multi" {
             "multi"
@@ -237,7 +257,7 @@ fn main() {
 
     let _tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
-        .with_tooltip("Monitor Manager v1.02 (Ultra-Light Native)")
+        .with_tooltip("Monitor Manager v1.03 (Dark Matte Titanium)")
         .with_icon(tray_icon_data)
         .build()
         .ok();
@@ -303,6 +323,45 @@ fn main() {
         } else {
             let _ = slint::quit_event_loop();
             slint::CloseRequestResponse::HideWindow
+        }
+    });
+
+    // Callback barra superiore borderless: Drag finestra
+    ui.on_start_window_drag(move || {
+        initiate_native_window_drag();
+    });
+
+    // Callback barra superiore borderless: Riduci a icona (—)
+    let ui_weak_min = ui.as_weak();
+    ui.on_minimize_window(move || {
+        if let Some(u) = ui_weak_min.upgrade() {
+            u.window().set_minimized(true);
+            trim_process_working_set();
+        }
+    });
+
+    // Callback barra superiore borderless: Ingrandisci / Ripristina (▢)
+    let ui_weak_max = ui.as_weak();
+    ui.on_toggle_maximize_window(move || {
+        if let Some(u) = ui_weak_max.upgrade() {
+            let next_max = !u.window().is_maximized();
+            u.window().set_maximized(next_max);
+            u.set_window_maximized(next_max);
+        }
+    });
+
+    // Callback barra superiore borderless: Chiudi / Minimizza nella System Tray (✕)
+    let settings_btn_close = Arc::clone(&settings_state);
+    let ui_weak_btn_close = ui.as_weak();
+    ui.on_close_window(move || {
+        let close_to_tray = settings_btn_close.lock().unwrap().close_to_tray;
+        if close_to_tray {
+            if let Some(u) = ui_weak_btn_close.upgrade() {
+                let _ = u.hide();
+            }
+            trim_process_working_set();
+        } else {
+            let _ = slint::quit_event_loop();
         }
     });
 
@@ -421,21 +480,22 @@ fn main() {
         });
     });
 
-    // Callback: Salvataggio Impostazioni
+    // Callback: Salvataggio Impostazioni (Zero RAM Overhead)
     let settings_save = Arc::clone(&settings_state);
     let ui_weak_save = ui.as_weak();
     ui.on_save_settings(move || {
         if let Some(u) = ui_weak_save.upgrade() {
             let mut s = settings_save.lock().unwrap();
-            s.theme = u.get_theme_pref().to_string();
+            s.language = u.get_lang().to_string();
             s.accent_palette = u.get_accent_palette().to_string();
+            s.glow_style = u.get_glow_style().to_string();
+            s.layout_density = u.get_layout_density().to_string();
             s.layout_mode = u.get_layout_mode().to_string();
             s.sync_monitors = u.get_sync_monitors();
             s.hide_unsupported = u.get_hide_unsupported();
             s.close_to_tray = u.get_close_to_tray();
             s.start_with_windows = u.get_start_with_windows();
             s.auto_check_updates = u.get_auto_check_updates();
-            u.set_dark_mode(s.effective_dark_mode());
             let _ = s.save();
         }
     });

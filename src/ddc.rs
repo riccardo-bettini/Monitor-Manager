@@ -216,6 +216,7 @@ fn update_cached_vcp(info: &mut MonitorInfo, vcp_code: u8, value: u32) {
 struct EdidDisplayIdentity {
     friendly_name: String,
     device_path: String,
+    refresh_hz: u32,
 }
 
 /// Usa QueryDisplayConfig per mappare ogni GDI Device (`\\.\DISPLAY1`) al vero nome EDID e produttore
@@ -268,12 +269,20 @@ fn query_edid_identities() -> HashMap<String, EdidDisplayIdentity> {
                 let gdi = wide_to_string(&source_name.viewGdiDeviceName);
                 let friendly = wide_to_string(&target_name.monitorFriendlyDeviceName);
                 let dev_path = wide_to_string(&target_name.monitorDevicePath);
+                let refresh_hz = if path.targetInfo.refreshRate.Denominator > 0 {
+                    (path.targetInfo.refreshRate.Numerator as f64
+                        / path.targetInfo.refreshRate.Denominator as f64)
+                        .round() as u32
+                } else {
+                    0
+                };
                 if !gdi.is_empty() {
                     map.insert(
                         gdi,
                         EdidDisplayIdentity {
                             friendly_name: friendly,
                             device_path: dev_path,
+                            refresh_hz,
                         },
                     );
                 }
@@ -419,7 +428,7 @@ unsafe extern "system" fn monitor_enum_proc(
         let gdi_device = wide_to_string(&mi.szDevice);
         let width = (mi.monitorInfo.rcMonitor.right - mi.monitorInfo.rcMonitor.left).abs();
         let height = (mi.monitorInfo.rcMonitor.bottom - mi.monitorInfo.rcMonitor.top).abs();
-        let resolution = format!("{} × {}", width, height);
+        let resolution = format!("{}×{}", width, height);
         let is_primary = (mi.monitorInfo.dwFlags & 1) != 0;
 
         list.push(EnumMonitorEntry {
@@ -488,6 +497,10 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
         join_handles.push(thread::spawn(move || {
             let h = handle_int as HANDLE;
             let (brand, name, model_code) = parse_brand_and_model(edid.as_ref(), &desc, idx);
+            let full_resolution = match edid.as_ref().map(|e| e.refresh_hz).unwrap_or(0) {
+                hz if hz > 0 => format!("{} | {}Hz", entry.resolution, hz),
+                _ => entry.resolution,
+            };
 
             let brightness = read_vcp(h, VCP_BRIGHTNESS, 100);
             let contrast = read_vcp(h, VCP_CONTRAST, 100);
@@ -512,7 +525,7 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
                 brand,
                 model_code,
                 gdi_device: entry.gdi_device,
-                resolution: entry.resolution,
+                resolution: full_resolution,
                 is_primary: entry.is_primary,
                 ddc_supported,
                 brightness,

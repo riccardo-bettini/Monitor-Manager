@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 
-const APP_VERSION: &str = "1.02";
+const APP_VERSION: &str = "1.03";
 const APP_NAME: &str = "Monitor Manager";
 const PAYLOAD_EXE: &[u8] = include_bytes!("../../target/release/monitor-manager.exe");
 
@@ -292,7 +292,7 @@ fn main() {
         if let Some(u) = uw.upgrade() {
             u.set_installing(true);
             u.set_status_text(SharedString::from(
-                "Installazione di Monitor Manager v1.02 in corso...",
+                "Installazione di Monitor Manager v1.03 in corso...",
             ));
             let opts = InstallOptions {
                 desktop_shortcut: u.get_opt_desktop(),
@@ -307,7 +307,7 @@ fn main() {
                             u.set_installing(false);
                             u.set_installed(true);
                             u.set_status_text(SharedString::from(
-                                "✓ Monitor Manager v1.02 installato con successo!",
+                                "✓ Monitor Manager v1.03 installato con successo!",
                             ));
                         }
                     });

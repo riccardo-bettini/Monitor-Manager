@@ -100,64 +100,56 @@ Ispirazione estetica: **Apple iOS 26 Liquid Glass**
 
 ---
 
-## 7. Nuova Struttura di Layout Dashboard (Ispirazione "Glassy Dashboard V24")
+## 8. Nuove Direttive di Design "Dark Matte Titanium" & Architettura Nativa Slint (v1.03+)
 
-Dall'analisi del video ("Glassy Dashboard V24"), la struttura dell'applicazione si evolve verso una dashboard moderna organizzata a **due macro-blocchi fluttuanti in vetro satinato**:
+Con il passaggio all'architettura nativa pura **Slint** (senza Chromium/WebView2 per garantire un consumo RAM di soli **~25-35 MB** attiva e **~2-8 MB** in background durante il gaming), le vecchie direttive basate su filtri CSS ad alto impatto di compositing (`backdrop-filter: blur`, particelle pesanti in DOM) sono sostituite dalle **nuove direttive stilistiche "Dark Matte Titanium"**, basate direttamente sull'anteprima nativa approvata.
 
-```
-+-----------------------------------------------------------------------------------------------------------------+
-|                                        SFONDO LIQUID GLASS FLUIDO CON MACCHIE DI COLORE                         |
-|                                                                                                                 |
-|  +------------------------------+  +-------------------------------------------------------------------------+  |
-|  | SIDEBAR FLUTTUANTE A CAPSULA |  | PANNELLO PRINCIPALE DASHBOARD (Floating Glass Canvas)                   |  |
-|  | - Profilo / Logo App         |  |                                                                         |  |
-|  | - Mini-search / switch       |  |  [Header Saluto / Monitor Attivo]            [Azioni Rapide: Rescan, Sync]|  |
-|  |                              |  |                                                                         |  |
-|  | [MONITOR COLLEGATI]          |  |  +------------------------------------+  +----------------------------+ |  |
-|  | • ASUS TUF Gaming            |  |  | HERO CARD RISALTATA (Accent Glass) |  | SIDE WIDGET (Risoluzione,  | |  |
-|  | • AOC Gaming                 |  |  | Monitor attivo, stato connessione, |  | Input video attivo, Hz e   | |  |
-|  | • KTC Display                |  |  | indicatore circolare % / preset    |  | info hardware EDID)        | |  |
-|  |                              |  |  +------------------------------------+  +----------------------------+ |  |
-|  | [CATEGORIE CONTROLLO]        |  |                                                                         |  |
-|  | ☼ Luminosità & Contrasto     |  |  +---------------+ +---------------+ +---------------+ +---------------+  |  |
-|  | ◉ Colori & Bilanciamento RGB |  |  | STAT CARD 1   | | STAT CARD 2   | | STAT CARD 3   | | STAT CARD 4   |  |  |
-|  | ♫ Audio & Input Video        |  |  | Luminosità    | | Contrasto     | | Nitidezza     | | Saturazione   |  |  |
-|  |                              |  |  | [Valore & %]  | | [Valore & %]  | | [Valore & %]  | | [Valore & %]  |  |  |
-|  | [SISTEMA]                    |  |  +---------------+ +---------------+ +---------------+ +---------------+  |  |
-|  | ⚙ Impostazioni               |  |                                                                         |  |
-|  | ✦ Aggiornamenti GitHub       |  |  +----------------------------------------------------------------------+  |  |
-|  |                              |  |  | SLIDER INTERATTIVI ESTESI & SELETTORI RAPIDI CHIP IN VETRO SATINATO   |  |  |
-|  +------------------------------+  +-------------------------------------------------------------------------+  |
-+-----------------------------------------------------------------------------------------------------------------+
-```
+### 8.1. Filosofia Visiva: "Dark Matte Titanium"
+- **Sfondo Finestra**: Tinta unita profonda antracite scura opaca (`#16191f` / `#1c1f26`), pulita e priva di filtri blur a livello software per azzerare il carico GPU/CPU.
+- **Card e Pannelli**: Finitura solida opaca satinata (`#21252d` con sfumatura impercettibile verso `#272b35`), bordi netti e geometrici ma ingentiliti con raggio di curvatura sottile e moderno (`border-radius: 10px - 14px`).
+- **Glow & Bordi Attivi (Neon Glow)**: L'elemento attivo (es. card del monitor selezionato nella sidebar o slider in trascinamento) è evidenziato da un bordo ad alto contrasto con bagliore neon colorato d'accento (`#ff5733` default Coral Neon).
+- **Barra Superiore Borderless Integrata**:
+  - Nessuna barra standard Windows vistosa: barra del titolo integrata seamless a tutta larghezza con drag della finestra.
+  - Tasti finestra (Riduci a icona, Ingrandisci, Chiudi) collocati in un blocco compatto ad accento cromatico in alto a destra, come nell'anteprima.
 
-### Dettaglio dei componenti strutturali:
-1. **Sidebar Laterale Fluttuante a Sinistra (Floating Glass Capsule Sidebar)**:
-   - Contenitore a capsula separato con vetro satinato ad alto blur, distaccato dai bordi della finestra.
-   - **Header**: Logo circolare luminescente `Monitor Manager` + nome profilo o postazione.
-   - **Sezione Monitor Collegati**: Elenco interattivo dei monitor fisici (ASUS, AOC, KTC) come voci selezionabili con stato di alimentazione e pill attiva.
-   - **Sezione Categorie**: Switch istantaneo tra le sezioni funzionali (*Panoramica Multi-Monitor*, *Display & Luminosità*, *Calibrazione Colore*, *Audio & Input*).
-   - **Footer**: Accesso rapido alle *Impostazioni*, stato aggiornamenti GitHub e controlli di sistema.
+### 8.2. Sistema di Personalizzazione a Zero Impatto RAM
+Tutte le personalizzazioni sono gestite tramite proprietà reattive native in Slint (`slint::Color`, enum ed interi), senza allocazione di texture o buffer di memoria aggiuntivi:
+1. **Palette Colore d'Accento (5 Preset)**:
+   - **Coral Neon** (Predefinito, arancione/rosso gaming vivace `#ff5733`)
+   - **Cyber Cyan** (Azzurro elettrico `#00e5ff`)
+   - **Emerald Green** (Verde smeraldo `#00e676`)
+   - **Electric Violet** (Viola dinamico `#bd00ff`)
+   - **Amber Gold** (Giallo ambra intenso `#ffb300`)
+   - *Effetto*: Colora istantaneamente l'anello gauge circolare, gli indicatori degli slider, i badge di stato e il glow dei monitor selezionati.
+2. **Stile Glow dei Bordi (Bordo ed Enfasi)**:
+   - *Minimal / Spento*: Bordo chiaro semplice da 1px senza bagliore diffuso.
+   - *Sottile (Predefinito)*: Bordo d'accento con alone luminoso discreto.
+   - *Marcato (Gaming Glow)*: Bordo ad alta saturazione con contorno doppio per massima leggibilità durante il gioco.
+3. **Densità Layout**:
+   - *Standard* (Ideale per monitor 1440p / 4K, spaziatura ariosa).
+   - *Compatta* (Margini e altezze ridotti, ideale per schermi 1080p o finestre affiancate).
+4. **Localizzazione Bilingue (Lingua Interfaccia)**:
+   - Selettore istantaneo **Italiano** / **English**:
+     - *IT*: Monitor Manager, Luminosità, Contrasto, Nitidezza, Saturazione, Guadagno RGB, Impostazioni.
+     - *EN*: Monitor Manager, Brightness, Contrast, Sharpness, Saturation, RGB Gain, Settings.
 
-2. **Hero Glass Card Superiore**:
-   - Card in primo piano con sfumatura vibrante ad alto contrasto (accent glass).
-   - Nome del monitor primario/selezionato in evidenza.
-   - **Widget circolare** percentuale (gauge interattivo per la luminosità o taratura globale).
-   - Azioni rapide a pillola: *"Sincronizza tutti"*, *"Rileva monitor"*, *"Preset rapido"*.
+### 8.3. Layout e Componenti Chiave
+1. **Sidebar Sinistra**:
+   - Logo e nome `Monitor Manager` in testa.
+   - **Lista Monitor Hardware**: Pill dedicate per ciascun monitor rilevato (**ASUS TUF Gaming VG27A**, **AOC Q27G2**, **KTC H27T22**) con icona display, nome EDID e indicatore LED / glow sul monitor attualmente attivo.
+   - **Navigazione Inferiore**: *Dashboard*, *Profili Colore / Tutti i Monitor*, *Impostazioni*.
+2. **Hero Header Card**:
+   - Nome del monitor a caratteri grandi.
+   - Badge di stato verde brillante `● DDC/CI Active`.
+   - Scheda tecnica compatta: `Risoluzione | Frequenza Hz | Porta d'ingresso` (es. `2560×1440 | 165Hz | DisplayPort 1`).
+   - **Circular Gauge 75%**: Anello circolare ad alto spessore che visualizza la luminosità del display con percentuale numerica al centro.
+3. **Quartetto Stat Cards**:
+   - 4 card affiancate: *Brightness* (0x10), *Contrast* (0x12), *Sharpness* (0x87), *Saturation* (0x8A).
+   - Valore numerico grande ad alto contrasto (75%, 50%, 60%, 50%).
+   - Mini-slider orizzontale incassato direttamente nella parte inferiore di ciascuna card per regolazione a colpo d'occhio.
+4. **Pannello Guadagno RGB (RGB Gain)**:
+   - 3 slider orizzontali colorati individualmente (*Red*, *Green*, *Blue*) per calibrazione accurata dei singoli canali colore del monitor.
 
-3. **Side Widget Ausiliario**:
-   - Card affiancata alla Hero card dedicata a: risoluzione attuale, frequenza di aggiornamento, sorgente input attiva e indicatore DDC/CI.
-
-4. **Griglia Orizzontale a 4 "Stat Cards"**:
-   - 4 card rettangolari affiancate con angoli generosamente arrotondati e hover con fisica a molla (`whileHover: { y: -5 }`):
-     - **Card 1**: Luminosità (icona, valore %, slider rapido o barra di avanzamento).
-     - **Card 2**: Contrasto (icona, valore numerico).
-     - **Card 3**: Nitidezza / Sharpness (icona, livello VCP).
-     - **Card 4**: Saturazione / Colore (icona, livello VCP).
-
-5. **Pannello Controlli Dettagliati & Quick Action Pills**:
-   - Slider estesi con traccia vetrosa e thumb con riflesso speculare.
-   - Selettori a pillola/chip per *Temperatura Colore* (5000K, 6500K, 9300K, Utente) e *Sorgente Input* (DP1, DP2, HDMI1, HDMI2, USB-C).
 
 
 

@@ -3,8 +3,8 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-fn default_theme() -> String {
-    "system".to_string()
+fn default_language() -> String {
+    "it".to_string()
 }
 fn default_layout_mode() -> String {
     "single".to_string()
@@ -15,25 +15,22 @@ fn default_true() -> bool {
 fn default_accent_palette() -> String {
     "coral".to_string()
 }
-fn default_custom_accent_hex() -> String {
-    "#e15b48".to_string()
+fn default_glow_style() -> String {
+    "subtle".to_string()
 }
-fn default_glass_blur() -> u32 {
-    44
-}
-fn default_blob_intensity() -> u32 {
-    85
+fn default_layout_density() -> String {
+    "standard".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
-    /// "system" | "dark" | "light"
-    #[serde(default = "default_theme")]
-    pub theme: String,
-    /// "single" (Dashboard Monitor Singolo) | "multi" (Schede Affiancate)
+    /// Lingua interfaccia: "it" (Italiano) | "en" (English)
+    #[serde(default = "default_language")]
+    pub language: String,
+    /// "single" (Dashboard Monitor Singolo) | "multi" (Tutti i Monitor Affiancati)
     #[serde(default = "default_layout_mode")]
     pub layout_mode: String,
-    /// Nasconde gli slider per i codici VCP non supportati dal singolo monitor
+    /// Nasconde i controlli VCP non supportati dal singolo monitor
     #[serde(default)]
     pub hide_unsupported: bool,
     /// Sincronizza le modifiche su tutti i monitor collegati
@@ -48,27 +45,21 @@ pub struct AppSettings {
     /// Minimizza nella System Tray invece di chiudere quando si preme la X
     #[serde(default = "default_true")]
     pub close_to_tray: bool,
-    /// Palette colore accento e Hero Card: "coral" | "cyan" | "emerald" | "purple" | "amber" | "custom"
+    /// Palette colore d'accento Dark Matte Titanium: "coral" | "cyan" | "emerald" | "violet" | "amber"
     #[serde(default = "default_accent_palette")]
     pub accent_palette: String,
-    /// Colore esadecimale scelto dall'utente quando accent_palette == "custom"
-    #[serde(default = "default_custom_accent_hex")]
-    pub custom_accent_hex: String,
-    /// Intensità sfocatura vetro (backdrop-filter blur in px, 16..=64)
-    #[serde(default = "default_glass_blur")]
-    pub glass_blur: u32,
-    /// Opacità / intensità delle macchie di colore fluttuanti sullo sfondo (0..=100)
-    #[serde(default = "default_blob_intensity")]
-    pub blob_intensity: u32,
-    /// Attiva/disattiva il movimento fluttuante delle macchie di colore sullo sfondo
-    #[serde(default = "default_true")]
-    pub animate_blobs: bool,
+    /// Stile Glow dei bordi: "none" | "subtle" | "intense"
+    #[serde(default = "default_glow_style")]
+    pub glow_style: String,
+    /// Densità del layout: "standard" | "compact"
+    #[serde(default = "default_layout_density")]
+    pub layout_density: String,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            theme: default_theme(),
+            language: default_language(),
             layout_mode: default_layout_mode(),
             hide_unsupported: false,
             sync_monitors: false,
@@ -76,10 +67,8 @@ impl Default for AppSettings {
             auto_check_updates: true,
             close_to_tray: true,
             accent_palette: default_accent_palette(),
-            custom_accent_hex: default_custom_accent_hex(),
-            glass_blur: default_glass_blur(),
-            blob_intensity: default_blob_intensity(),
-            animate_blobs: true,
+            glow_style: default_glow_style(),
+            layout_density: default_layout_density(),
         }
     }
 }
@@ -97,7 +86,25 @@ impl AppSettings {
     pub fn load() -> Self {
         let path = Self::settings_path();
         if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(settings) = serde_json::from_str::<AppSettings>(&content) {
+            if let Ok(mut settings) = serde_json::from_str::<AppSettings>(&content) {
+                // Normalizza eventuali valori legacy
+                if settings.accent_palette == "purple" {
+                    settings.accent_palette = "violet".to_string();
+                } else if !matches!(
+                    settings.accent_palette.as_str(),
+                    "coral" | "cyan" | "emerald" | "violet" | "amber"
+                ) {
+                    settings.accent_palette = "coral".to_string();
+                }
+                if !matches!(settings.glow_style.as_str(), "none" | "subtle" | "intense") {
+                    settings.glow_style = "subtle".to_string();
+                }
+                if !matches!(settings.layout_density.as_str(), "standard" | "compact") {
+                    settings.layout_density = "standard".to_string();
+                }
+                if !matches!(settings.language.as_str(), "it" | "en") {
+                    settings.language = "it".to_string();
+                }
                 return settings;
             }
         }
@@ -112,14 +119,6 @@ impl AppSettings {
         fs::write(path, json).map_err(|e| e.to_string())?;
         self.apply_autostart();
         Ok(())
-    }
-
-    pub fn effective_dark_mode(&self) -> bool {
-        match self.theme.as_str() {
-            "light" => false,
-            "dark" => true,
-            _ => is_windows_dark_mode(),
-        }
     }
 
     pub fn apply_autostart(&self) {
@@ -163,37 +162,4 @@ impl AppSettings {
             }
         }
     }
-}
-
-pub fn is_windows_dark_mode() -> bool {
-    use windows_sys::Win32::System::Registry::{
-        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
-    };
-    let subkey: Vec<u16> =
-        "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
-            .encode_utf16()
-            .collect();
-    let val_name: Vec<u16> = "AppsUseLightTheme\0".encode_utf16().collect();
-    unsafe {
-        let mut hkey: HKEY = std::ptr::null_mut();
-        if RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_READ, &mut hkey) == 0
-            && !hkey.is_null()
-        {
-            let mut data: u32 = 0;
-            let mut size: u32 = 4;
-            let status = RegQueryValueExW(
-                hkey,
-                val_name.as_ptr(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                &mut data as *mut u32 as *mut u8,
-                &mut size,
-            );
-            let _ = RegCloseKey(hkey);
-            if status == 0 {
-                return data == 0;
-            }
-        }
-    }
-    true
 }
