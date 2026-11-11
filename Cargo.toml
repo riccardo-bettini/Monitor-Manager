@@ -1,12 +1,12 @@
 [package]
 name = "monitor-manager"
-version = "1.0.8"
+version = "1.0.9"
 edition = "2021"
 description = "Ultra-Lightweight Native DDC/CI Monitor Manager"
 authors = ["Riccardo Bettini"]
 
 [package.metadata.monitor_manager]
-display_version = "1.08"
+display_version = "1.09"
 github_repo = "riccardo-bettini/Monitor-Manager"
 
 [[bin]]

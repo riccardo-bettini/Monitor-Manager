@@ -57,6 +57,9 @@ pub struct AppSettings {
     /// Elenco ordinato dei monitor per memorizzare l'ordinamento manuale utente
     #[serde(default)]
     pub monitor_order: Vec<String>,
+    /// Vera trasparenza Acrylic di Windows (DWM) sulla sidebar sinistra
+    #[serde(default = "default_true")]
+    pub acrylic_transparency: bool,
 }
 
 impl Default for AppSettings {
@@ -73,6 +76,7 @@ impl Default for AppSettings {
             glow_style: default_glow_style(),
             layout_density: default_layout_density(),
             monitor_order: Vec::new(),
+            acrylic_transparency: true,
         }
     }
 }

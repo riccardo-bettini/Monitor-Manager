@@ -36,11 +36,8 @@ fn trim_process_working_set() {
     }
 }
 
-/// Applica gli angoli arrotondati standard Windows 11 (DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND)
-/// e il drop-shadow nativo alla finestra dell'app borderless.
-fn apply_windows_rounded_corners() {
+fn get_window_hwnd() -> Option<windows_sys::Win32::Foundation::HWND> {
     use windows_sys::Win32::Foundation::HWND;
-    use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
     };
@@ -52,7 +49,6 @@ fn apply_windows_rounded_corners() {
         GetWindowThreadProcessId(hwnd, &mut pid);
         let my_pid = *(lparam as *const u32);
         if pid == my_pid && IsWindowVisible(hwnd) != 0 {
-            // Salva l'HWND nel puntatore passato come secondo u32 o campo
             let target_ptr = (lparam as *mut usize).add(1) as *mut HWND;
             *target_ptr = hwnd;
             return 0; // trovato, interrompe enumerazione
@@ -63,16 +59,88 @@ fn apply_windows_rounded_corners() {
     let mut state: [usize; 2] = [my_pid as usize, 0];
     unsafe {
         EnumWindows(Some(find_hwnd_cb), state.as_mut_ptr() as isize);
-        let found_hwnd = state[1] as HWND;
-        if !found_hwnd.is_null() {
-            // DWMWCP_ROUND = 2 (arrotondamento standard Windows 11)
-            let preference: u32 = 2;
+        let found = state[1] as HWND;
+        if !found.is_null() {
+            Some(found)
+        } else {
+            None
+        }
+    }
+}
+
+/// Applica la vera trasparenza Acrylic di Windows (DWM) combinata con angoli arrotondati e drop-shadow.
+/// Supporta Windows 11 nativo (DWMWA_SYSTEMBACKDROP_TYPE) e Windows 10 (SetWindowCompositionAttribute).
+fn set_window_acrylic(enabled: bool) {
+    use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE};
+
+    if let Some(hwnd) = get_window_hwnd() {
+        unsafe {
+            // 1. Assicura sempre gli angoli arrotondati standard Windows 11 (DWMWCP_ROUND = 2)
+            let corner_pref: u32 = 2;
             let _ = DwmSetWindowAttribute(
-                found_hwnd,
+                hwnd,
                 DWMWA_WINDOW_CORNER_PREFERENCE as u32,
-                &preference as *const _ as *const _,
+                &corner_pref as *const _ as *const _,
                 std::mem::size_of::<u32>() as u32,
             );
+
+            // 2. Windows 11 DWM Backdrop (DWMSBT_TRANSIENTWINDOW = 3 per Acrylic, DWMSBT_NONE = 1 per opaco)
+            let backdrop_type: u32 = if enabled { 3 } else { 1 };
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                38, // DWMWA_SYSTEMBACKDROP_TYPE
+                &backdrop_type as *const _ as *const _,
+                std::mem::size_of::<u32>() as u32,
+            );
+
+            // 3. Fallback per Windows 10 tramite SetWindowCompositionAttribute (user32.dll)
+            #[repr(C)]
+            struct AccentPolicy {
+                accent_state: u32,
+                accent_flags: u32,
+                gradient_color: u32,
+                animation_id: u32,
+            }
+            #[repr(C)]
+            struct WindowCompositionAttributeData {
+                attribute: u32,
+                data: *mut std::ffi::c_void,
+                size_of_data: usize,
+            }
+
+            type SetWindowCompositionAttributeFn = unsafe extern "system" fn(
+                hwnd: windows_sys::Win32::Foundation::HWND,
+                data: *mut WindowCompositionAttributeData,
+            ) -> i32;
+
+            if let Ok(lib) = std::ffi::CString::new("user32.dll") {
+                #[link(name = "kernel32")]
+                extern "system" {
+                    fn GetModuleHandleA(lpModuleName: *const i8) -> isize;
+                    fn GetProcAddress(hModule: isize, lpProcName: *const i8) -> *const std::ffi::c_void;
+                }
+                let h_user32 = GetModuleHandleA(lib.as_ptr());
+                if h_user32 != 0 {
+                    if let Ok(fn_name) = std::ffi::CString::new("SetWindowCompositionAttribute") {
+                        let proc = GetProcAddress(h_user32, fn_name.as_ptr());
+                        if !proc.is_null() {
+                            let set_attr: SetWindowCompositionAttributeFn = std::mem::transmute(proc);
+                            let mut policy = AccentPolicy {
+                                accent_state: if enabled { 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */ } else { 0 },
+                                accent_flags: if enabled { 2 } else { 0 },
+                                gradient_color: if enabled { 0x66181c22 } else { 0 }, // Fumé scuro 40% alfa
+                                animation_id: 0,
+                            };
+                            let mut data = WindowCompositionAttributeData {
+                                attribute: 19, // WCA_ACCENT_POLICY
+                                data: &mut policy as *mut _ as *mut std::ffi::c_void,
+                                size_of_data: std::mem::size_of::<AccentPolicy>(),
+                            };
+                            let _ = set_attr(hwnd, &mut data);
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -250,6 +318,7 @@ fn main() {
         ui.set_close_to_tray(s.close_to_tray);
         ui.set_start_with_windows(s.start_with_windows);
         ui.set_auto_check_updates(s.auto_check_updates);
+        ui.set_acrylic_enabled(s.acrylic_transparency);
     }
 
     // Configurazione System Tray
@@ -286,10 +355,12 @@ fn main() {
     MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
         if event.id == open_id {
             let uw = ui_weak_menu.clone();
+            let s_menu = Arc::clone(&settings_menu);
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(u) = uw.upgrade() {
                     let _ = u.show();
-                    apply_windows_rounded_corners();
+                    let acrylic = s_menu.lock().unwrap().acrylic_transparency;
+                    set_window_acrylic(acrylic);
                 }
             });
         } else if event.id == rescan_id {
@@ -315,6 +386,7 @@ fn main() {
 
     // Click sinistro sull'icona della System Tray riapre immediatamente la finestra
     let ui_weak_tray = ui.as_weak();
+    let settings_tray = Arc::clone(&settings_state);
     TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
         if let TrayIconEvent::Click {
             button: MouseButton::Left,
@@ -323,10 +395,12 @@ fn main() {
         } = event
         {
             let uw = ui_weak_tray.clone();
+            let s_tr = Arc::clone(&settings_tray);
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(u) = uw.upgrade() {
                     let _ = u.show();
-                    apply_windows_rounded_corners();
+                    let acrylic = s_tr.lock().unwrap().acrylic_transparency;
+                    set_window_acrylic(acrylic);
                 }
             });
         }
@@ -361,6 +435,7 @@ fn main() {
     // Callback barra superiore borderless: Ingrandisci / Ripristina (▢)
     // Con salvataggio dimensione precedente per prevenire il collasso o blocco su Windows
     let ui_weak_max = ui.as_weak();
+    let s_max = Arc::clone(&settings_state);
     let last_window_size = Arc::new(Mutex::new(None::<(u32, u32)>));
     let last_ws_clone = Arc::clone(&last_window_size);
     ui.on_toggle_maximize_window(move || {
@@ -380,7 +455,8 @@ fn main() {
                 let w = w.max(860);
                 let h = h.max(540);
                 u.window().set_size(slint::PhysicalSize::new(w, h));
-                apply_windows_rounded_corners();
+                let acrylic = s_max.lock().unwrap().acrylic_transparency;
+                set_window_acrylic(acrylic);
             }
         }
     });
@@ -520,8 +596,18 @@ fn main() {
             s.close_to_tray = u.get_close_to_tray();
             s.start_with_windows = u.get_start_with_windows();
             s.auto_check_updates = u.get_auto_check_updates();
+            s.acrylic_transparency = u.get_acrylic_enabled();
             let _ = s.save();
         }
+    });
+
+    // Callback: Toggle Trasparenza Acrylic in tempo reale
+    let settings_acrylic = Arc::clone(&settings_state);
+    ui.on_toggle_acrylic(move |enabled| {
+        set_window_acrylic(enabled);
+        let mut s = settings_acrylic.lock().unwrap();
+        s.acrylic_transparency = enabled;
+        let _ = s.save();
     });
 
     // Callback: Verifica Aggiornamenti GitHub
@@ -618,10 +704,11 @@ fn main() {
 
     if !start_minimized {
         let _ = ui.show();
-        apply_windows_rounded_corners();
-        thread::spawn(|| {
+        let acrylic = settings_state.lock().unwrap().acrylic_transparency;
+        set_window_acrylic(acrylic);
+        thread::spawn(move || {
             thread::sleep(std::time::Duration::from_millis(80));
-            apply_windows_rounded_corners();
+            set_window_acrylic(acrylic);
         });
     } else {
         trim_process_working_set();

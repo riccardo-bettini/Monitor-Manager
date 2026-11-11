@@ -389,6 +389,8 @@ export component AppWindow inherits Window {
     in-out property <string> glow-style: "subtle";
     // Densità Layout: "standard" | "compact"
     in-out property <string> layout-density: "standard";
+    // Vera Trasparenza Windows Acrylic (DWM) sulla sidebar
+    in-out property <bool> acrylic-enabled: true;
 
     // Impostazioni Funzionali & Sistema
     in-out property <string> layout-mode: "single";
@@ -400,10 +402,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.08";
-    in-out property <string> update-status-text: "Monitor Manager v1.08 (Dark Matte Titanium)";
+    in-out property <string> app-version: "1.09";
+    in-out property <string> update-status-text: "Monitor Manager v1.09 (Dark Matte Titanium & Acrylic)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.08";
+    in-out property <string> latest-version: "1.09";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -418,6 +420,7 @@ export component AppWindow inherits Window {
     callback toggle-maximize-window();
     callback close-window();
     callback move-monitor(int /* index */, int /* direction: -1 up, 1 down */);
+    callback toggle-acrylic(bool);
 
     // --- Palette Colori Reattive ---
     property <bool> is-en: root.lang == "en";
@@ -465,7 +468,7 @@ export component AppWindow inherits Window {
         height: 100%;
         border-radius: root.window-maximized ? 0px : 12px;
         clip: true;
-        background: #171a21;
+        background: transparent;
         border-width: root.window-maximized ? 0px : 1px;
         border-color: #2c313d;
 
@@ -473,19 +476,19 @@ export component AppWindow inherits Window {
             spacing: 0px;
 
             // ================================================================
-            // 1. SIDEBAR SINISTRA (Stile Dark Matte Slate dal Mockup)
+            // 1. SIDEBAR SINISTRA (Stile Dark Matte Slate & Acrylic dal Mockup)
             // ================================================================
             Rectangle {
                 width: 248px;
-                background: #232731;
+                background: root.acrylic-enabled ? #181d2673 : #232731;
 
-                // Sfumatura ambientale discreta nell'angolo inferiore destro della sidebar (come nel mockup)
+                // Sfumatura calda ambrata diffusa nel punto luce del mockup (Dark Smoke Bokeh)
                 if root.glow-style != "none" : Rectangle {
-                    x: 110px;
-                    y: parent.height - 190px;
-                    width: 138px;
-                    height: 190px;
-                    background: @linear-gradient(135deg, transparent 0%, root.accent-soft 100%);
+                    x: 60px;
+                    y: parent.height - 220px;
+                    width: 188px;
+                    height: 220px;
+                    background: @linear-gradient(135deg, transparent 0%, root.acrylic-enabled ? #ff5c4735 : root.accent-soft 100%);
                 }
 
                 // Bordo verticale destro di separazione
@@ -2211,6 +2214,35 @@ export component AppWindow inherits Window {
                                                 clicked => { root.layout-density = "compact"; root.save-settings(); }
                                             }
                                         }
+
+                                        // Separatore
+                                        Rectangle { height: 1px; background: #2e3442; }
+
+                                        // Toggle Trasparenza Windows Acrylic (DWM)
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            VerticalLayout {
+                                                alignment: center;
+                                                spacing: 2px;
+                                                Text {
+                                                    text: root.is-en ? "Windows Acrylic Transparency (DWM)" : "Trasparenza Windows Acrylic (DWM)";
+                                                    color: #ffffff;
+                                                    font-size: 13px;
+                                                    font-weight: 600;
+                                                }
+                                                Text {
+                                                    text: root.is-en
+                                                        ? "Real-time desktop frosted glass blur behind the sidebar"
+                                                        : "Vera sfocatura vetro satinato del desktop dietro la sidebar";
+                                                    color: #8c95a6;
+                                                    font-size: 11px;
+                                                }
+                                            }
+                                            TitaniumToggle {
+                                                checked <=> root.acrylic-enabled;
+                                                toggled(v) => { root.toggle-acrylic(v); }
+                                            }
+                                        }
                                     }
                                 }
 
@@ -2393,10 +2425,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.08 (DARK MATTE TITANIUM CON ANGOLI ARROTONDATI)
+// FINESTRA INSTALLER SETUP v1.09 (DARK MATTE TITANIUM & ACRYLIC)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.08";
+    title: "Installazione Monitor Manager v1.09";
     preferred-width: 520px;
     preferred-height: 410px;
     background: transparent;
@@ -2407,7 +2439,7 @@ export component SetupWindow inherits Window {
     in-out property <bool> opt-launch: true;
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.08 (Dark Matte Titanium)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.09 (Dark Matte Titanium & Acrylic)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -2440,13 +2472,13 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.07";
+                        text: "Monitor Manager v1.09";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
                     }
                     Text {
-                        text: "Dark Matte Titanium · Motore Nativo Slint (~2-8 MB RAM in Tray)";
+                        text: "Dark Matte Titanium & Acrylic · Motore Nativo Slint (~2-8 MB RAM in Tray)";
                         color: #c5cbd6;
                         font-size: 12px;
                     }
@@ -2527,7 +2559,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione..." : "Installa v1.07 Ora";
+                    text: root.installing ? "Installazione..." : "Installa v1.09 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;

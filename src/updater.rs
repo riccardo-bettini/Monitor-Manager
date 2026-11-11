@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::process::Command;
 
-pub const APP_VERSION: &str = "1.08";
+pub const APP_VERSION: &str = "1.09";
 pub const GITHUB_REPO: &str = "riccardo-bettini/Monitor-Manager";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
