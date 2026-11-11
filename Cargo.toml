@@ -1,12 +1,12 @@
 [package]
 name = "monitor-manager"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
-description = "Universal DDC/CI Monitor Manager with Apple iOS 26 Liquid Glass UI"
+description = "Ultra-Lightweight Native DDC/CI Monitor Manager"
 authors = ["Riccardo Bettini"]
 
 [package.metadata.monitor_manager]
-display_version = "1.01"
+display_version = "1.02"
 github_repo = "riccardo-bettini/Monitor-Manager"
 
 [[bin]]
@@ -18,8 +18,14 @@ name = "Monitor-Manager-Setup"
 path = "src/bin/setup.rs"
 
 [dependencies]
-tao = { version = "0.30", features = ["rwh_05"] }
-wry = { version = "0.47", features = ["transparent"] }
+slint = { version = "1.9", default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "backend-winit",
+    "renderer-femtovg",
+    "renderer-software",
+    "raw-window-handle-06",
+] }
 tray-icon = "0.19"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -32,6 +38,9 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Dwm",
 ] }
+
+[build-dependencies]
+slint-build = "1.9"
 
 [profile.release]
 opt-level = "z"

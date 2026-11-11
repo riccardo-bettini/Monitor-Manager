@@ -114,6 +114,14 @@ impl AppSettings {
         Ok(())
     }
 
+    pub fn effective_dark_mode(&self) -> bool {
+        match self.theme.as_str() {
+            "light" => false,
+            "dark" => true,
+            _ => is_windows_dark_mode(),
+        }
+    }
+
     pub fn apply_autostart(&self) {
         use windows_sys::Win32::System::Registry::{
             RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
@@ -155,4 +163,37 @@ impl AppSettings {
             }
         }
     }
+}
+
+pub fn is_windows_dark_mode() -> bool {
+    use windows_sys::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
+    };
+    let subkey: Vec<u16> =
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
+            .encode_utf16()
+            .collect();
+    let val_name: Vec<u16> = "AppsUseLightTheme\0".encode_utf16().collect();
+    unsafe {
+        let mut hkey: HKEY = std::ptr::null_mut();
+        if RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_READ, &mut hkey) == 0
+            && !hkey.is_null()
+        {
+            let mut data: u32 = 0;
+            let mut size: u32 = 4;
+            let status = RegQueryValueExW(
+                hkey,
+                val_name.as_ptr(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut data as *mut u32 as *mut u8,
+                &mut size,
+            );
+            let _ = RegCloseKey(hkey);
+            if status == 0 {
+                return data == 0;
+            }
+        }
+    }
+    true
 }
