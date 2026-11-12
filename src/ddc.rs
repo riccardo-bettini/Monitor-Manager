@@ -66,6 +66,10 @@ pub struct MonitorInfo {
     pub color_temp: VcpFeatureState,
     pub volume: VcpFeatureState,
     pub input_source: VcpFeatureState,
+    #[serde(default)]
+    pub is_internal_wmi: bool,
+    #[serde(default)]
+    pub wmi_instance: String,
 }
 
 struct PhysicalHandleWrap(HANDLE);
@@ -79,12 +83,14 @@ struct ManagedMonitor {
 
 impl Drop for ManagedMonitor {
     fn drop(&mut self) {
-        unsafe {
-            let pm = PHYSICAL_MONITOR {
-                hPhysicalMonitor: self.handle.0,
-                szPhysicalMonitorDescription: [0; 128],
-            };
-            let _ = DestroyPhysicalMonitors(1, &pm);
+        if !self.handle.0.is_null() {
+            unsafe {
+                let pm = PHYSICAL_MONITOR {
+                    hPhysicalMonitor: self.handle.0,
+                    szPhysicalMonitorDescription: [0; 128],
+                };
+                let _ = DestroyPhysicalMonitors(1, &pm);
+            }
         }
     }
 }
@@ -125,32 +131,50 @@ impl DdcEngine {
         let monitors_ref = Arc::clone(&self.monitors);
         let queue_ref = Arc::clone(&self.queue);
 
-        thread::spawn(move || loop {
-            let next_batch: Vec<((usize, u8), u32)> = {
-                let (lock, cvar) = &*queue_ref;
-                let mut q = lock.lock().unwrap();
-                while q.pending.is_empty() && !q.shutdown {
-                    q = cvar.wait(q).unwrap();
-                }
-                if q.shutdown {
-                    return;
-                }
-                q.pending.drain().collect()
-            };
+        thread::spawn(move || {
+            let mut wmi_session: Option<crate::wmi_brightness::WmiSession> = None;
 
-            for ((monitor_id, vcp_code), value) in next_batch {
-                // Prendiamo l'handle senza bloccare la UI durante la chiamata I2C
-                let raw_handle = {
-                    let guard = monitors_ref.lock().unwrap();
-                    guard
-                        .iter()
-                        .find(|m| m.info.id == monitor_id)
-                        .map(|m| m.handle.0 as isize)
+            loop {
+                let next_batch: Vec<((usize, u8), u32)> = {
+                    let (lock, cvar) = &*queue_ref;
+                    let mut q = lock.lock().unwrap();
+                    while q.pending.is_empty() && !q.shutdown {
+                        q = cvar.wait(q).unwrap();
+                    }
+                    if q.shutdown {
+                        return;
+                    }
+                    q.pending.drain().collect()
                 };
 
-                if let Some(h_int) = raw_handle {
-                    unsafe {
-                        let _ = SetVCPFeature(h_int as HANDLE, vcp_code, value);
+                for ((monitor_id, vcp_code), value) in next_batch {
+                    // Prendiamo l'handle senza bloccare la UI durante la chiamata I2C o WMI
+                    let target = {
+                        let guard = monitors_ref.lock().unwrap();
+                        guard.iter().find(|m| m.info.id == monitor_id).map(|m| {
+                            (
+                                m.handle.0 as isize,
+                                m.info.is_internal_wmi,
+                                m.info.wmi_instance.clone(),
+                            )
+                        })
+                    };
+
+                    if let Some((h_int, is_wmi, wmi_instance)) = target {
+                        if is_wmi {
+                            if vcp_code == VCP_BRIGHTNESS {
+                                if wmi_session.is_none() {
+                                    wmi_session = crate::wmi_brightness::WmiSession::connect();
+                                }
+                                if let Some(ref session) = wmi_session {
+                                    let _ = session.set_brightness(&wmi_instance, value);
+                                }
+                            }
+                        } else if h_int != 0 {
+                            unsafe {
+                                let _ = SetVCPFeature(h_int as HANDLE, vcp_code, value);
+                            }
+                        }
                     }
                 }
             }
@@ -208,6 +232,9 @@ impl DdcEngine {
             let mut ids = Vec::new();
             for m in guard.iter_mut() {
                 if sync_all || m.info.id == monitor_id {
+                    if m.info.is_internal_wmi && vcp_code != VCP_BRIGHTNESS {
+                        continue;
+                    }
                     update_cached_vcp(&mut m.info, vcp_code, value);
                     ids.push(m.info.id);
                 }
@@ -518,9 +545,14 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
     }
 
     // Interroghiamo ogni monitor in parallelo su thread dedicati per dimezzare i tempi di avvio
+    let wmi_panels = crate::wmi_brightness::query_wmi_panels();
     let mut join_handles = Vec::new();
     for (idx, (id, entry, raw_handle, desc)) in handles_to_probe.into_iter().enumerate() {
         let edid = edid_map.get(&entry.gdi_device).cloned();
+        let edid_path = edid
+            .as_ref()
+            .map(|e| e.device_path.clone())
+            .unwrap_or_default();
         let handle_int = raw_handle as isize;
 
         join_handles.push(thread::spawn(move || {
@@ -567,22 +599,165 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
                 color_temp,
                 volume,
                 input_source,
+                is_internal_wmi: false,
+                wmi_instance: String::new(),
             };
 
-            ManagedMonitor {
-                info,
-                handle: PhysicalHandleWrap(h),
-            }
+            (
+                ManagedMonitor {
+                    info,
+                    handle: PhysicalHandleWrap(h),
+                },
+                edid_path,
+            )
         }));
     }
 
-    let mut result = Vec::new();
+    let mut probed: Vec<(ManagedMonitor, String)> = Vec::new();
     for jh in join_handles {
-        if let Ok(managed) = jh.join() {
-            result.push(managed);
+        if let Ok(item) = jh.join() {
+            probed.push(item);
         }
     }
 
+    // Abbiniamo gli schermi integrati dei laptop (eDP/LVDS) tramite WMI quando DDC/CI non è presente
+    if !wmi_panels.is_empty() {
+        let mut used_wmi = vec![false; wmi_panels.len()];
+
+        // Primo passaggio: abbinamento deterministico EDID device path <-> WMI InstanceName
+        for (mon, edid_path) in &mut probed {
+            if !mon.info.brightness.supported {
+                if let Some((p_idx, panel)) = wmi_panels.iter().enumerate().find(|(idx, p)| {
+                    !used_wmi[*idx]
+                        && crate::wmi_brightness::matches_device_path(&p.instance_name, edid_path)
+                }) {
+                    used_wmi[p_idx] = true;
+                    mon.info.brightness = VcpFeatureState {
+                        code: VCP_BRIGHTNESS,
+                        supported: true,
+                        current: panel.current.min(panel.max.max(100)),
+                        max: panel.max.max(100),
+                    };
+                    mon.info.is_internal_wmi = true;
+                    mon.info.wmi_instance = panel.instance_name.clone();
+                }
+            }
+        }
+
+        // Fallback sicuro: se rimane esattamente 1 pannello WMI e 1 schermo privo di DDC/CI
+        let unmatched_wmi: Vec<usize> = used_wmi
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &u)| if !u { Some(i) } else { None })
+            .collect();
+        let unmatched_non_ddc: Vec<usize> = probed
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (m, _))| {
+                if !m.info.ddc_supported && !m.info.is_internal_wmi {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if unmatched_wmi.len() == 1 && unmatched_non_ddc.len() == 1 {
+            let panel = &wmi_panels[unmatched_wmi[0]];
+            let mon = &mut probed[unmatched_non_ddc[0]].0;
+            mon.info.brightness = VcpFeatureState {
+                code: VCP_BRIGHTNESS,
+                supported: true,
+                current: panel.current.min(panel.max.max(100)),
+                max: panel.max.max(100),
+            };
+            mon.info.is_internal_wmi = true;
+            mon.info.wmi_instance = panel.instance_name.clone();
+        }
+    }
+
+    let mut result: Vec<ManagedMonitor> = probed.into_iter().map(|(m, _)| m).collect();
     result.sort_by_key(|m| (!m.info.is_primary, m.info.id));
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_monitor(id: usize, name: &str, is_internal_wmi: bool) -> ManagedMonitor {
+        ManagedMonitor {
+            info: MonitorInfo {
+                id,
+                name: name.to_string(),
+                brand: if is_internal_wmi { "AUO" } else { "AOC" }.to_string(),
+                model_code: name.to_string(),
+                gdi_device: format!("\\\\.\\DISPLAY{}", id),
+                resolution: "1920x1080".to_string(),
+                is_primary: id == 1,
+                ddc_supported: !is_internal_wmi,
+                brightness: VcpFeatureState {
+                    code: VCP_BRIGHTNESS,
+                    supported: true,
+                    current: 70,
+                    max: 100,
+                },
+                contrast: VcpFeatureState::unsupported(VCP_CONTRAST, 100),
+                saturation: VcpFeatureState::unsupported(VCP_SATURATION, 100),
+                sharpness: VcpFeatureState::unsupported(VCP_SHARPNESS, 100),
+                red_gain: VcpFeatureState::unsupported(VCP_RED_GAIN, 100),
+                green_gain: VcpFeatureState::unsupported(VCP_GREEN_GAIN, 100),
+                blue_gain: VcpFeatureState::unsupported(VCP_BLUE_GAIN, 100),
+                color_temp: VcpFeatureState::unsupported(VCP_COLOR_TEMP, 20),
+                volume: VcpFeatureState::unsupported(VCP_VOLUME, 100),
+                input_source: VcpFeatureState::unsupported(VCP_INPUT_SOURCE, 30),
+                is_internal_wmi,
+                wmi_instance: if is_internal_wmi {
+                    "DISPLAY\\AUOD2A2\\test_0".to_string()
+                } else {
+                    String::new()
+                },
+            },
+            handle: PhysicalHandleWrap(std::ptr::null_mut()),
+        }
+    }
+
+    #[test]
+    fn reorder_monitors_swaps_and_guards_bounds() {
+        let engine = DdcEngine::new();
+        {
+            let mut guard = engine.monitors.lock().unwrap();
+            guard.push(sample_monitor(1, "AOC 24G1WG4", false));
+            guard.push(sample_monitor(2, "AUO B156HAN15.H", true));
+        }
+
+        let after = engine.reorder_monitors(0, 1);
+        assert_eq!(after[0].id, 2);
+        assert_eq!(after[1].id, 1);
+
+        let unchanged = engine.reorder_monitors(0, 99);
+        assert_eq!(unchanged[0].id, 2);
+        assert_eq!(unchanged[1].id, 1);
+    }
+
+    #[test]
+    fn sync_all_only_updates_brightness_on_wmi_panels() {
+        let engine = DdcEngine::new();
+        {
+            let mut guard = engine.monitors.lock().unwrap();
+            guard.push(sample_monitor(1, "AOC 24G1WG4", false));
+            let mut laptop = sample_monitor(2, "AUO B156HAN15.H", true);
+            laptop.info.contrast.current = 50;
+            guard.push(laptop);
+        }
+
+        engine.set_vcp_value(1, VCP_BRIGHTNESS, 42, true);
+        engine.set_vcp_value(1, VCP_CONTRAST, 80, true);
+
+        let cached = engine.get_cached_monitors();
+        assert_eq!(cached[0].brightness.current, 42);
+        assert_eq!(cached[1].brightness.current, 42);
+        // Il pannello WMI non supporta contrasto DDC/CI, quindi sync_all non deve alterarlo
+        assert_eq!(cached[1].contrast.current, 50);
+    }
 }

@@ -7,6 +7,7 @@ export struct UiMonitor {
     resolution: string,
     is-primary: bool,
     ddc-supported: bool,
+    is-internal-wmi: bool,
     brightness: int,
     brightness-max: int,
     brightness-sup: bool,
@@ -39,28 +40,225 @@ export global SpringTheme {
 }
 
 // ============================================================================
-// CONTENITORE DI VISTA CON TRANSIZIONE A MOLLA (FADE & SLIDE-UP 12PX)
+// ICONE VETTORIALI NITIDE (SOSTITUISCONO TUTTE LE EMOJI / GLIFI UNICODE BROKEN)
 // ============================================================================
-component SpringViewContainer inherits Rectangle {
-    in property <bool> is-active: false;
+component HomeGlyph inherits Rectangle {
+    in property <color> icon-color: #9da5b4;
+    width: 16px;
+    height: 16px;
+    background: transparent;
 
-    visible: root.is-active;
+    Path {
+        width: 16px;
+        height: 16px;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        fill: transparent;
+        stroke: root.icon-color;
+        stroke-width: 1.8px;
+        stroke-line-cap: round;
+        MoveTo { x: 3; y: 10.5; }
+        LineTo { x: 12; y: 3.5; }
+        LineTo { x: 21; y: 10.5; }
+        MoveTo { x: 5.5; y: 8.8; }
+        LineTo { x: 5.5; y: 20; }
+        LineTo { x: 18.5; y: 20; }
+        LineTo { x: 18.5; y: 8.8; }
+        MoveTo { x: 9.5; y: 20; }
+        LineTo { x: 9.5; y: 14; }
+        LineTo { x: 14.5; y: 14; }
+        LineTo { x: 14.5; y: 20; }
+    }
+}
 
-    inner := Rectangle {
-        width: 100%;
-        y: root.is-active ? 0px : 12px;
-        opacity: root.is-active ? 1.0 : 0.0;
+component DisplayGlyph inherits Rectangle {
+    in property <color> icon-color: #9da5b4;
+    in property <bool> is-laptop: false;
+    width: 16px;
+    height: 16px;
+    background: transparent;
 
-        animate opacity {
-            duration: SpringTheme.animations-enabled ? 220ms : 0ms;
-            easing: ease-out;
+    // Cornice pannello (monitor o portatile)
+    Rectangle {
+        x: root.is-laptop ? 2px : 1px;
+        y: root.is-laptop ? 2px : 2px;
+        width: root.is-laptop ? 12px : 14px;
+        height: root.is-laptop ? 9px : 9.5px;
+        border-radius: 2px;
+        border-width: 1.5px;
+        border-color: root.icon-color;
+        background: transparent;
+    }
+    // Gambo desktop (solo display esterni)
+    if !root.is-laptop : Rectangle {
+        x: 7px;
+        y: 11.5px;
+        width: 2px;
+        height: 2px;
+        background: root.icon-color;
+    }
+    // Base monitor desktop o scocca tastiera portatile
+    Rectangle {
+        x: root.is-laptop ? 0.5px : 4.5px;
+        y: root.is-laptop ? 12px : 13.5px;
+        width: root.is-laptop ? 15px : 7px;
+        height: root.is-laptop ? 2px : 1.6px;
+        border-radius: 0.8px;
+        background: root.icon-color;
+    }
+}
+
+component DashboardGlyph inherits Rectangle {
+    in property <color> icon-color: #9da5b4;
+    width: 14px;
+    height: 14px;
+    background: transparent;
+
+    Rectangle { x: 1px; y: 1px; width: 5px; height: 5px; border-radius: 1.5px; border-width: 1.4px; border-color: root.icon-color; }
+    Rectangle { x: 8px; y: 1px; width: 5px; height: 5px; border-radius: 1.5px; border-width: 1.4px; border-color: root.icon-color; }
+    Rectangle { x: 1px; y: 8px; width: 5px; height: 5px; border-radius: 1.5px; border-width: 1.4px; border-color: root.icon-color; }
+    Rectangle { x: 8px; y: 8px; width: 5px; height: 5px; border-radius: 1.5px; background: root.icon-color; }
+}
+
+component ProfileGlyph inherits Rectangle {
+    in property <color> icon-color: #9da5b4;
+    width: 14px;
+    height: 14px;
+    background: transparent;
+
+    Rectangle {
+        x: 1px;
+        y: 1px;
+        width: 12px;
+        height: 12px;
+        border-radius: 6px;
+        border-width: 1.5px;
+        border-color: root.icon-color;
+        clip: true;
+
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: 6px;
+            height: 12px;
+            background: root.icon-color;
         }
-        animate y {
-            duration: SpringTheme.animations-enabled ? 240ms : 0ms;
-            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
-        }
+    }
+}
 
-        @children
+component ReorderGlyph inherits Rectangle {
+    in property <color> icon-color: #9da5b4;
+    width: 16px;
+    height: 16px;
+    background: transparent;
+
+    Path {
+        width: 16px;
+        height: 16px;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        fill: transparent;
+        stroke: root.icon-color;
+        stroke-width: 1.9px;
+        stroke-line-cap: round;
+        MoveTo { x: 8; y: 19; }
+        LineTo { x: 8; y: 5; }
+        MoveTo { x: 4.5; y: 8.5; }
+        LineTo { x: 8; y: 5; }
+        LineTo { x: 11.5; y: 8.5; }
+        MoveTo { x: 16; y: 5; }
+        LineTo { x: 16; y: 19; }
+        MoveTo { x: 12.5; y: 15.5; }
+        LineTo { x: 16; y: 19; }
+        LineTo { x: 19.5; y: 15.5; }
+    }
+}
+
+component SettingsGlyph inherits Rectangle {
+    in property <color> icon-color: #9da5b4;
+    width: 16px;
+    height: 16px;
+    background: transparent;
+
+    Path {
+        width: 16px;
+        height: 16px;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        fill: transparent;
+        stroke: root.icon-color;
+        stroke-width: 1.8px;
+        stroke-line-cap: round;
+        // 3 slider orizzontali minimal moderni
+        MoveTo { x: 4; y: 6.5; }
+        LineTo { x: 20; y: 6.5; }
+        MoveTo { x: 4; y: 12; }
+        LineTo { x: 20; y: 12; }
+        MoveTo { x: 4; y: 17.5; }
+        LineTo { x: 20; y: 17.5; }
+    }
+    Rectangle { x: 9px; y: 2.3px; width: 4px; height: 4px; border-radius: 2px; background: root.icon-color; }
+    Rectangle { x: 4px; y: 6px; width: 4px; height: 4px; border-radius: 2px; background: root.icon-color; }
+    Rectangle { x: 10px; y: 9.7px; width: 4px; height: 4px; border-radius: 2px; background: root.icon-color; }
+}
+
+component DragGripGlyph inherits Rectangle {
+    in property <color> icon-color: #8a92a2;
+    width: 14px;
+    height: 16px;
+    background: transparent;
+
+    Rectangle { x: 2px; y: 2px; width: 3px; height: 3px; border-radius: 1.5px; background: root.icon-color; }
+    Rectangle { x: 8px; y: 2px; width: 3px; height: 3px; border-radius: 1.5px; background: root.icon-color; }
+    Rectangle { x: 2px; y: 6.5px; width: 3px; height: 3px; border-radius: 1.5px; background: root.icon-color; }
+    Rectangle { x: 8px; y: 6.5px; width: 3px; height: 3px; border-radius: 1.5px; background: root.icon-color; }
+    Rectangle { x: 2px; y: 11px; width: 3px; height: 3px; border-radius: 1.5px; background: root.icon-color; }
+    Rectangle { x: 8px; y: 11px; width: 3px; height: 3px; border-radius: 1.5px; background: root.icon-color; }
+}
+
+component CategoryBadge inherits Rectangle {
+    in property <color> accent: #f05a46;
+    in property <string> kind: "system"; // "system" | "style" | "hardware" | "updates"
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: root.accent.with-alpha(0.16);
+    border-width: 1px;
+    border-color: root.accent.with-alpha(0.35);
+
+    if root.kind == "system" : DisplayGlyph {
+        x: 6px;
+        y: 6px;
+        icon-color: root.accent;
+    }
+    if root.kind == "style" : ProfileGlyph {
+        x: 7px;
+        y: 7px;
+        icon-color: root.accent;
+    }
+    if root.kind == "hardware" : ReorderGlyph {
+        x: 6px;
+        y: 6px;
+        icon-color: root.accent;
+    }
+    if root.kind == "updates" : Path {
+        width: 16px;
+        height: 16px;
+        x: 6px;
+        y: 6px;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        fill: transparent;
+        stroke: root.accent;
+        stroke-width: 2px;
+        stroke-line-cap: round;
+        MoveTo { x: 12; y: 4; }
+        LineTo { x: 12; y: 15; }
+        MoveTo { x: 7.5; y: 11; }
+        LineTo { x: 12; y: 15.5; }
+        LineTo { x: 16.5; y: 11; }
+        MoveTo { x: 5; y: 19.5; }
+        LineTo { x: 19; y: 19.5; }
     }
 }
 
@@ -221,17 +419,27 @@ component NeonSlider inherits Rectangle {
 }
 
 // ============================================================================
-// GAUGE CIRCOLARE AD ARCO APERTO IN BASSO (260°) — ALTA DEFINIZIONE & ZERO OVERHEAD
+// GAUGE CIRCOLARE VETTORIALE SVG AD ARCO (260°) — NITIDA ALTA DEFINIZIONE
 // ============================================================================
 component ArcGauge inherits Rectangle {
     in property <int> percentage: 75;
-    in property <string> label: "Brightness";
-    in property <color> accent: #ff5733;
+    in property <string> label: "Luminosità";
+    in property <color> accent: #f05a46;
     in property <string> glow-style: "subtle";
     callback adjusted(int);
 
-    width: 124px;
-    height: 124px;
+    property <float> animated-pct: Math.clamp(root.percentage, 0, 100);
+    animate animated-pct {
+        duration: SpringTheme.animations-enabled ? 220ms : 0ms;
+        easing: cubic-bezier(0.34, 1.3, 0.64, 1);
+    }
+
+    property <angle> start-ang: 140deg;
+    property <angle> sweep-ang: Math.max(0.5, root.animated-pct * 2.6) * 1deg;
+    property <angle> end-ang: root.start-ang + root.sweep-ang;
+
+    width: 122px;
+    height: 122px;
     background: transparent;
 
     ta-gauge := TouchArea {
@@ -250,11 +458,21 @@ component ArcGauge inherits Rectangle {
         }
     }
 
+    // Alone sottile dietro l'anello quando glow != none
+    if root.glow-style != "none" : Rectangle {
+        width: 106px;
+        height: 106px;
+        border-radius: 53px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: root.accent.with-alpha(root.glow-style == "intense" ? 0.14 : 0.06);
+    }
+
     // Sfondo interno circolare satinato scuro
     Rectangle {
-        width: 86px;
-        height: 86px;
-        border-radius: 43px;
+        width: 82px;
+        height: 82px;
+        border-radius: 41px;
         background: #171b23;
         border-width: 1px;
         border-color: #262c38;
@@ -262,35 +480,65 @@ component ArcGauge inherits Rectangle {
         y: (parent.height - self.height) / 2;
     }
 
-    // Traccia scura e arco di avanzamento a 120 segmenti sovrapposti ad altissima definizione (sweep 260°, raggio 46px)
-    for step[idx] in 120 : Rectangle {
-        property <angle> ang: -220deg + idx * 2.1848deg;
-        property <length> rad: 46px;
-        property <bool> active: (idx * 100 / 119) <= root.percentage;
+    // Traccia di fondo continua 260°
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fill: transparent;
+        stroke: #2a303d;
+        stroke-width: 8.5px;
+        stroke-line-cap: round;
 
-        width: 7px;
-        height: 7px;
-        border-radius: 3.5px;
-        x: 62px + Math.cos(self.ang) * self.rad - 3.5px;
-        y: 62px + Math.sin(self.ang) * self.rad - 3.5px;
-        background: self.active ? root.accent : #282d38;
+        MoveTo { x: 50 + 40 * Math.cos(140deg); y: 50 + 40 * Math.sin(140deg); }
+        ArcTo {
+            radius-x: 40;
+            radius-y: 40;
+            large-arc: true;
+            sweep: true;
+            x: 50 + 40 * Math.cos(400deg);
+            y: 50 + 40 * Math.sin(400deg);
+        }
     }
 
-    // Testo centrale percentuale + dicitura nitida come nel mockup
+    // Arco attivo colorato animato ad alta definizione
+    if root.animated-pct > 0.4 : Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fill: transparent;
+        stroke: root.accent;
+        stroke-width: 8.5px;
+        stroke-line-cap: round;
+
+        MoveTo { x: 50 + 40 * Math.cos(root.start-ang); y: 50 + 40 * Math.sin(root.start-ang); }
+        ArcTo {
+            radius-x: 40;
+            radius-y: 40;
+            large-arc: root.sweep-ang > 180deg;
+            sweep: true;
+            x: 50 + 40 * Math.cos(root.end-ang);
+            y: 50 + 40 * Math.sin(root.end-ang);
+        }
+    }
+
+    // Testo centrale percentuale + dicitura nitida
     VerticalLayout {
         alignment: center;
-        spacing: 2px;
+        spacing: 1px;
         Text {
             text: "\{root.percentage}%";
             color: #ffffff;
-            font-size: 26px;
+            font-size: 25px;
             font-weight: 800;
             horizontal-alignment: center;
         }
         Text {
             text: root.label;
             color: #9da5b4;
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 600;
             horizontal-alignment: center;
         }
@@ -350,15 +598,15 @@ component TitaniumStatCard inherits Rectangle {
         alignment: space-between;
 
         Text {
-            text: root.title;
-            color: #c5cbd6;
+            text: root.supported ? root.title : "\{root.title} (N/D)";
+            color: root.supported ? #c5cbd6 : #707888;
             font-size: 13px;
             font-weight: 500;
         }
 
         Text {
-            text: "\{Math.round(root.value * 100 / Math.max(1, root.maximum))}%";
-            color: #ffffff;
+            text: root.supported ? "\{Math.round(root.value * 100 / Math.max(1, root.maximum))}%" : "--";
+            color: root.supported ? #ffffff : #6b7280;
             font-size: root.compact ? 28px : 33px;
             font-weight: 700;
         }
@@ -444,7 +692,7 @@ component TitaniumChip inherits Rectangle {
         alignment: center;
         Text {
             text: root.text;
-            color: root.active ? #ffffff : #b8bfcc;
+            color: root.active ? #ffffff : #dce1eb;
             font-size: 12px;
             font-weight: root.active ? 700 : 500;
             vertical-alignment: center;
@@ -454,6 +702,305 @@ component TitaniumChip inherits Rectangle {
     ta-chip := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+    }
+}
+
+component AccentSwatchChip inherits Rectangle {
+    in property <string> text;
+    in property <bool> active: false;
+    in property <color> swatch-color: #f05a46;
+    in property <string> glow-style: "subtle";
+    callback clicked();
+
+    height: 32px;
+    border-radius: 7px;
+    background: root.active ? root.swatch-color.with-alpha(0.18) : (ta-sw.has-hover ? #323846 : #282d38);
+    border-width: root.active ? (root.glow-style == "intense" ? 2px : 1.5px) : 1px;
+    border-color: root.active ? root.swatch-color : (ta-sw.has-hover ? root.swatch-color.with-alpha(0.45) : #363c4a);
+
+    animate background, border-color {
+        duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 7px;
+        alignment: center;
+
+        Rectangle {
+            width: 8px;
+            height: 8px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 4px;
+            background: root.swatch-color;
+        }
+        Text {
+            text: root.text;
+            color: root.active ? #ffffff : #b8bfcc;
+            font-size: 11.5px;
+            font-weight: root.active ? 700 : 500;
+            vertical-alignment: center;
+        }
+    }
+
+    ta-sw := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component HomeMonitorCard inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <int> mon-index: 0;
+    in property <color> accent-main: #f05a46;
+    in property <string> glow-style: "subtle";
+    in property <bool> is-en: false;
+    in property <bool> hide-unsupported: false;
+    callback set-vcp(int, int, int);
+    callback open-details(int);
+
+    border-radius: 12px;
+    background: card-hover.has-hover ? #252a35 : #21252e;
+    border-width: 1px;
+    border-color: card-hover.has-hover ? root.accent-main.with-alpha(0.55) : #2d323e;
+
+    animate background, border-color {
+        duration: SpringTheme.animations-enabled ? 200ms : 0ms;
+        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+
+    card-hover := TouchArea {
+        width: 100%;
+        height: 100%;
+    }
+
+    VerticalLayout {
+        padding: 18px;
+        spacing: 14px;
+
+        // Intestazione card monitor
+        HorizontalLayout {
+            alignment: space-between;
+            spacing: 10px;
+
+            HorizontalLayout {
+                spacing: 10px;
+                horizontal-stretch: 1;
+
+                Rectangle {
+                    width: 34px;
+                    height: 34px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 8px;
+                    background: #1a1e26;
+                    border-width: 1px;
+                    border-color: #2c3240;
+
+                    DisplayGlyph {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        is-laptop: root.mon.is-internal-wmi;
+                        icon-color: root.mon.ddc-supported || root.mon.is-internal-wmi ? root.accent-main : #8a92a2;
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: 3px;
+                    alignment: center;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: root.mon.name;
+                        color: #ffffff;
+                        font-size: 15px;
+                        font-weight: 700;
+                        overflow: elide;
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        alignment: start;
+                        Rectangle {
+                            width: 7px;
+                            height: 7px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 3.5px;
+                            background: root.mon.ddc-supported ? #39d353 : (root.mon.is-internal-wmi ? #38bdf8 : #f59e0b);
+                        }
+                        Text {
+                            text: root.mon.ddc-supported
+                                ? (root.is-en ? "DDC/CI Active" : "DDC/CI Attivo")
+                                : (root.mon.is-internal-wmi
+                                    ? (root.is-en ? "Internal WMI" : "WMI Integrato")
+                                    : (root.is-en ? "Read-Only" : "Solo Lettura"));
+                            color: root.mon.ddc-supported ? #39d353 : (root.mon.is-internal-wmi ? #38bdf8 : #f59e0b);
+                            font-size: 11px;
+                            font-weight: 600;
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 24px;
+                y: 4px;
+                border-radius: 6px;
+                background: #1b1e27;
+                border-width: 1px;
+                border-color: #2c3240;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    Text {
+                        text: root.mon.resolution;
+                        color: #9da5b4;
+                        font-size: 10.5px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // Controllo Luminosità + Preset rapidi
+        if !root.hide-unsupported || root.mon.brightness-sup : VerticalLayout {
+            spacing: 6px;
+            HorizontalLayout {
+                alignment: space-between;
+                Text {
+                    text: root.is-en ? "Brightness" : "Luminosità";
+                    color: root.mon.brightness-sup ? #c5cbd6 : #6b7280;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+                Text {
+                    text: "\{root.mon.brightness}%";
+                    color: root.mon.brightness-sup ? root.accent-main : #6b7280;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+            }
+            NeonSlider {
+                value: root.mon.brightness;
+                minimum: 0;
+                maximum: root.mon.brightness-max;
+                track-color: root.accent-main;
+                glow-style: root.glow-style;
+                enabled: root.mon.brightness-sup;
+                changed(v) => { root.set-vcp(root.mon.id, 16, v); }
+            }
+            if root.mon.brightness-sup : HorizontalLayout {
+                spacing: 6px;
+                padding-top: 2px;
+                TitaniumChip {
+                    horizontal-stretch: 1;
+                    height: 26px;
+                    text: "100%";
+                    active: root.mon.brightness == 100;
+                    accent: root.accent-main;
+                    glow-style: root.glow-style;
+                    clicked => { root.set-vcp(root.mon.id, 16, 100); }
+                }
+                TitaniumChip {
+                    horizontal-stretch: 1;
+                    height: 26px;
+                    text: "65%";
+                    active: root.mon.brightness == 65;
+                    accent: root.accent-main;
+                    glow-style: root.glow-style;
+                    clicked => { root.set-vcp(root.mon.id, 16, 65); }
+                }
+                TitaniumChip {
+                    horizontal-stretch: 1;
+                    height: 26px;
+                    text: "35%";
+                    active: root.mon.brightness == 35;
+                    accent: root.accent-main;
+                    glow-style: root.glow-style;
+                    clicked => { root.set-vcp(root.mon.id, 16, 35); }
+                }
+            }
+        }
+
+        // Controllo Contrasto (nascosto automaticamente se non supportato con filtro attivo)
+        if !root.hide-unsupported || root.mon.contrast-sup : VerticalLayout {
+            spacing: 6px;
+            HorizontalLayout {
+                alignment: space-between;
+                Text {
+                    text: root.mon.contrast-sup
+                        ? (root.is-en ? "Contrast" : "Contrasto")
+                        : (root.is-en ? "Contrast (N/A)" : "Contrasto (N/D)");
+                    color: root.mon.contrast-sup ? #c5cbd6 : #6b7280;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+                Text {
+                    text: root.mon.contrast-sup ? "\{root.mon.contrast}%" : "--";
+                    color: root.mon.contrast-sup ? root.accent-main : #6b7280;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+            }
+            NeonSlider {
+                value: root.mon.contrast;
+                minimum: 0;
+                maximum: root.mon.contrast-max;
+                track-color: root.accent-main;
+                glow-style: root.glow-style;
+                enabled: root.mon.contrast-sup;
+                changed(v) => { root.set-vcp(root.mon.id, 18, v); }
+            }
+        }
+
+        if root.hide-unsupported && !root.mon.brightness-sup && !root.mon.contrast-sup : Rectangle {
+            height: 36px;
+            border-radius: 8px;
+            background: #1b1e27;
+            Text {
+                text: root.is-en
+                    ? "No DDC/CI or WMI brightness control exposed."
+                    : "Nessun controllo DDC/CI o WMI esposto.";
+                color: #8a92a2;
+                font-size: 11px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // Pulsante Azione: Apri Dashboard & RGB
+        Rectangle {
+            height: 34px;
+            border-radius: 8px;
+            background: btn-ta.has-hover ? root.accent-main : #2a303d;
+            border-width: 1px;
+            border-color: btn-ta.has-hover ? root.accent-main : #384050;
+
+            animate background, border-color {
+                duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 6px;
+                Text {
+                    text: root.mon.is-internal-wmi
+                        ? (root.is-en ? "Display Controls" : "Controlli Display")
+                        : (root.is-en ? "Monitor Details & RGB" : "Dettagli Monitor & RGB");
+                    color: #ffffff;
+                    font-size: 12px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+            }
+
+            btn-ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.open-details(root.mon-index); }
+            }
+        }
     }
 }
 
@@ -478,6 +1025,7 @@ export component AppWindow inherits Window {
             resolution: "2560×1440 | 165Hz",
             is-primary: true,
             ddc-supported: true,
+            is-internal-wmi: false,
             brightness: 75,
             brightness-max: 100,
             brightness-sup: true,
@@ -555,10 +1103,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.12";
-    in-out property <string> update-status-text: "Monitor Manager v1.12 (Drag-and-Drop Display Reorder & Spring Animations)";
+    in-out property <string> app-version: "1.13";
+    in-out property <string> update-status-text: "Monitor Manager v1.13 (Frosted Acrylic, WMI Laptop & Native Vector UI)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.12";
+    in-out property <string> latest-version: "1.13";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -597,7 +1145,7 @@ export component AppWindow inherits Window {
         ? root.monitors[Math.clamp(root.selected-monitor-index, 0, root.monitors.length - 1)]
         : {
             id: 0, name: "Monitor", brand: "Generic", resolution: "1920×1080",
-            is-primary: true, ddc-supported: false,
+            is-primary: true, ddc-supported: false, is-internal-wmi: false,
             brightness: 50, brightness-max: 100, brightness-sup: true,
             contrast: 50, contrast-max: 100, contrast-sup: true,
             sharpness: 50, sharpness-max: 100, sharpness-sup: true,
@@ -619,7 +1167,7 @@ export component AppWindow inherits Window {
     main-container := Rectangle {
         width: 100%;
         height: 100%;
-        border-radius: root.window-maximized ? 0px : 12px;
+        border-radius: root.window-maximized ? 0px : 8px;
         clip: true;
         background: transparent;
         border-width: root.window-maximized ? 0px : 1px;
@@ -629,19 +1177,33 @@ export component AppWindow inherits Window {
             spacing: 0px;
 
             // ================================================================
-            // 1. SIDEBAR SINISTRA (Stile Dark Matte Slate & Acrylic dal Mockup)
+            // 1. SIDEBAR SINISTRA (Vetro Satinato Windows Acrylic come nel Mockup)
             // ================================================================
             Rectangle {
                 width: 248px;
-                background: root.acrylic-enabled ? #181d2673 : #232731;
+                clip: true;
+                background: root.acrylic-enabled ? #14182182 : #20242e;
 
-                // Sfumatura calda ambrata diffusa nel punto luce del mockup (Dark Smoke Bokeh)
+                // Riflesso morbido d'accento nell'angolo inferiore della sidebar (radiale senza bordi netti)
                 if root.glow-style != "none" : Rectangle {
-                    x: 60px;
-                    y: parent.height - 220px;
-                    width: 188px;
-                    height: 220px;
-                    background: @linear-gradient(135deg, transparent 0%, root.acrylic-enabled ? #ff5c4735 : root.accent-soft 100%);
+                    x: -60px;
+                    y: parent.height - 260px;
+                    width: 420px;
+                    height: 420px;
+                    background: @radial-gradient(
+                        circle,
+                        root.accent-main.with-alpha(root.glow-style == "intense" ? 0.24 : 0.14) 0%,
+                        transparent 70%
+                    );
+                }
+
+                // Sottile riflesso superiore di profondità vetro
+                if root.acrylic-enabled : Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: 1px;
+                    background: #ffffff14;
                 }
 
                 // Bordo verticale destro di separazione
@@ -650,7 +1212,7 @@ export component AppWindow inherits Window {
                     y: 0px;
                     width: 1px;
                     height: parent.height;
-                    background: #2e3340;
+                    background: root.acrylic-enabled ? #ffffff18 : #2e3340;
                 }
 
                 VerticalLayout {
@@ -723,48 +1285,19 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            // Titolo tipografico raffinato con micro-badge DDC/CI
-                            HorizontalLayout {
-                                spacing: 8px;
-                                alignment: start;
-                                y: (parent.height - self.height) / 2;
-
-                                Text {
-                                    text: "Monitor Manager";
-                                    color: #ffffff;
-                                    font-size: 15px;
-                                    font-weight: 700;
-                                    vertical-alignment: center;
-                                }
-
-                                Rectangle {
-                                    height: 18px;
-                                    border-radius: 4px;
-                                    background: #21252e;
-                                    border-width: 1px;
-                                    border-color: #333a48;
-                                    y: (parent.height - self.height) / 2;
-
-                                    HorizontalLayout {
-                                        padding-left: 6px;
-                                        padding-right: 6px;
-                                        alignment: center;
-                                        Text {
-                                            text: "DDC/CI";
-                                            color: #4aa3df;
-                                            font-size: 9px;
-                                            font-weight: 700;
-                                            letter-spacing: 0.5px;
-                                            vertical-alignment: center;
-                                        }
-                                    }
-                                }
+                            // Titolo tipografico pulito (senza badge ingombranti)
+                            Text {
+                                text: "Monitor Manager";
+                                color: #ffffff;
+                                font-size: 15px;
+                                font-weight: 700;
+                                vertical-alignment: center;
                             }
                         }
                     }
 
                     // Spazio prima del menu
-                    Rectangle { height: 6px; background: transparent; }
+                    Rectangle { height: 4px; background: transparent; }
 
                     // --- VOCE HOME IN CIMA (Panoramica Rapida a Blocchi) ---
                     Rectangle {
@@ -801,12 +1334,9 @@ export component AppWindow inherits Window {
                             spacing: 10px;
                             alignment: start;
 
-                            Text {
-                                text: "⌂";
-                                color: root.active-view == "home" ? root.accent-main : #9da5b4;
-                                font-size: 15px;
-                                font-weight: 700;
-                                vertical-alignment: center;
+                            HomeGlyph {
+                                y: (parent.height - self.height) / 2;
+                                icon-color: root.active-view == "home" ? root.accent-main : #9da5b4;
                             }
                             Text {
                                 text: root.is-en ? "Home · Overview" : "Home · Panoramica";
@@ -900,11 +1430,10 @@ export component AppWindow inherits Window {
                                                 spacing: 10px;
                                                 alignment: start;
 
-                                                Text {
-                                                    text: "▭";
-                                                    color: mon-entry.is-mon-active ? #ffffff : #9da5b4;
-                                                    font-size: 14px;
-                                                    vertical-alignment: center;
+                                                DisplayGlyph {
+                                                    y: (parent.height - self.height) / 2;
+                                                    is-laptop: mon.is-internal-wmi;
+                                                    icon-color: mon-entry.is-mon-active ? #ffffff : #9da5b4;
                                                 }
 
                                                 Text {
@@ -968,11 +1497,9 @@ export component AppWindow inherits Window {
                                                 spacing: 8px;
                                                 alignment: start;
 
-                                                Text {
-                                                    text: "↳ ⊞";
-                                                    color: root.active-view == "dashboard" ? root.accent-main : #9da5b4;
-                                                    font-size: 11px;
-                                                    vertical-alignment: center;
+                                                DashboardGlyph {
+                                                    y: (parent.height - self.height) / 2;
+                                                    icon-color: root.active-view == "dashboard" ? root.accent-main : #9da5b4;
                                                 }
                                                 Text {
                                                     text: "Dashboard";
@@ -1008,11 +1535,9 @@ export component AppWindow inherits Window {
                                                 spacing: 8px;
                                                 alignment: start;
 
-                                                Text {
-                                                    text: "↳ ◐";
-                                                    color: root.active-view == "profiles" ? root.accent-main : #9da5b4;
-                                                    font-size: 11px;
-                                                    vertical-alignment: center;
+                                                ProfileGlyph {
+                                                    y: (parent.height - self.height) / 2;
+                                                    icon-color: root.active-view == "profiles" ? root.accent-main : #9da5b4;
                                                 }
                                                 Text {
                                                     text: root.is-en ? "Color Profiles" : "Profili Colore";
@@ -1070,12 +1595,9 @@ export component AppWindow inherits Window {
                                     spacing: 10px;
                                     alignment: start;
 
-                                    Text {
-                                        text: "⇅";
-                                        color: root.active-view == "reorder" ? root.accent-main : #9da5b4;
-                                        font-size: 15px;
-                                        font-weight: 700;
-                                        vertical-alignment: center;
+                                    ReorderGlyph {
+                                        y: (parent.height - self.height) / 2;
+                                        icon-color: root.active-view == "reorder" ? root.accent-main : #9da5b4;
                                     }
                                     Text {
                                         text: root.is-en ? "Reorder Displays" : "Ordina Monitor";
@@ -1129,11 +1651,9 @@ export component AppWindow inherits Window {
                             padding-right: 12px;
                             spacing: 10px;
                             alignment: start;
-                            Text {
-                                text: "⚙";
-                                color: root.active-view == "settings" ? #ffffff : #9da5b4;
-                                font-size: 15px;
-                                vertical-alignment: center;
+                            SettingsGlyph {
+                                y: (parent.height - self.height) / 2;
+                                icon-color: root.active-view == "settings" ? root.accent-main : #9da5b4;
                             }
                             Text {
                                 text: root.is-en ? "Settings" : "Impostazioni";
@@ -1159,7 +1679,7 @@ export component AppWindow inherits Window {
 
                     // --- BARRA SUPERIORE BORDERLESS CON TRASCINAMENTO NATIVO SLINT ---
                     Rectangle {
-                        height: 38px;
+                        height: 34px;
                         background: transparent;
 
                         // Area di trascinamento finestra nativa Slint (zero deadlock Win32)
@@ -1170,7 +1690,7 @@ export component AppWindow inherits Window {
 
                         HorizontalLayout {
                             padding-left: 22px;
-                            padding-right: 14px;
+                            padding-right: 0px;
                             spacing: 0px;
 
                             // Zona comandi rapidi header
@@ -1192,8 +1712,8 @@ export component AppWindow inherits Window {
                                             padding-right: 8px;
                                             Text {
                                                 text: root.is-en
-                                                    ? "✦ Update v\{root.latest-version} ready"
-                                                    : "✦ Aggiornamento v\{root.latest-version} pronto";
+                                                    ? "Update v\{root.latest-version} ready"
+                                                    : "Aggiornamento v\{root.latest-version} pronto";
                                                 color: #ffffff;
                                                 font-size: 11px;
                                                 font-weight: 600;
@@ -1208,12 +1728,12 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            // Blocco Tasti Finestra in alto a destra (Pillola con colore accento dell'app con icone definite)
+                            // Blocco Tasti Finestra integrato a filo nell'angolo in alto a destra (stile Mockup)
                             Rectangle {
-                                width: 114px;
-                                height: 30px;
-                                y: 4px;
-                                border-radius: 7px;
+                                width: 120px;
+                                height: 34px;
+                                y: 0px;
+                                border-bottom-left-radius: 10px;
                                 background: root.accent-main;
 
                                 HorizontalLayout {
@@ -1223,8 +1743,7 @@ export component AppWindow inherits Window {
                                     min-btn := Rectangle {
                                         horizontal-stretch: 1;
                                         background: min-ta.has-hover ? #00000028 : transparent;
-                                        border-top-left-radius: 7px;
-                                        border-bottom-left-radius: 7px;
+                                        border-bottom-left-radius: 10px;
 
                                         animate background {
                                             duration: SpringTheme.animations-enabled ? 160ms : 0ms;
@@ -1257,8 +1776,8 @@ export component AppWindow inherits Window {
                                         }
 
                                         Rectangle {
-                                            width: 10px;
-                                            height: 10px;
+                                            width: 9px;
+                                            height: 9px;
                                             border-width: 1.6px;
                                             border-color: #ffffff;
                                             border-radius: 1.5px;
@@ -1277,8 +1796,6 @@ export component AppWindow inherits Window {
                                     cls-btn := Rectangle {
                                         horizontal-stretch: 1;
                                         background: cls-ta.has-hover ? #c5221f : transparent;
-                                        border-top-right-radius: 7px;
-                                        border-bottom-right-radius: 7px;
 
                                         animate background {
                                             duration: SpringTheme.animations-enabled ? 160ms : 0ms;
@@ -1286,16 +1803,17 @@ export component AppWindow inherits Window {
                                         }
 
                                         Path {
-                                            width: 10px;
-                                            height: 10px;
+                                            width: 9px;
+                                            height: 9px;
                                             stroke: #ffffff;
                                             stroke-width: 1.8px;
+                                            stroke-line-cap: round;
                                             x: (parent.width - self.width) / 2;
                                             y: (parent.height - self.height) / 2;
                                             MoveTo { x: 0; y: 0; }
-                                            LineTo { x: 10; y: 10; }
-                                            MoveTo { x: 10; y: 0; }
-                                            LineTo { x: 0; y: 10; }
+                                            LineTo { x: 9; y: 9; }
+                                            MoveTo { x: 9; y: 0; }
+                                            LineTo { x: 0; y: 9; }
                                         }
 
                                         cls-ta := TouchArea {
@@ -1309,29 +1827,30 @@ export component AppWindow inherits Window {
                     }
 
                     // --- CONTENUTO PRINCIPALE SCORREVOLE ---
-                    ScrollView {
+                    sv := ScrollView {
                         vertical-stretch: 1;
 
-                        HorizontalLayout {
-                            alignment: center;
+                        VerticalLayout {
+                            width: Math.max(self.min-width, sv.visible-width);
+                            alignment: start;
 
-                            VerticalLayout {
-                                max-width: 1040px;
-                                padding-left: 22px;
-                                padding-right: 22px;
-                                padding-top: root.is-compact ? 8px : 14px;
-                                padding-bottom: 22px;
-                                spacing: root.is-compact ? 12px : 16px;
-                                alignment: start;
-
-                            // ========================================================
-                            // VISTA 0: HOME — PANORAMICA RAPIDA MONITOR AFFIANCATI
-                            // ========================================================
-                            SpringViewContainer {
-                                is-active: root.active-view == "home";
+                            HorizontalLayout {
+                                alignment: center;
 
                                 VerticalLayout {
-                                    spacing: 16px;
+                                    width: Math.min(1084px, Math.max(504px, sv.visible-width));
+                                    padding-left: 22px;
+                                    padding-right: 22px;
+                                    padding-top: root.is-compact ? 10px : 14px;
+                                    padding-bottom: 24px;
+                                    spacing: root.is-compact ? 12px : 16px;
+                                    alignment: start;
+
+                            // ========================================================
+                            // VISTA 0: HOME — PANORAMICA RAPIDA A GRIGLIA ADATTIVA (2 COLONNE)
+                            // ========================================================
+                            if root.active-view == "home" : VerticalLayout {
+                                spacing: 16px;
 
                                 // Header Sezione Home
                                 Rectangle {
@@ -1357,18 +1876,19 @@ export component AppWindow inherits Window {
                                             }
                                             Text {
                                                 text: root.is-en
-                                                    ? "Adjust brightness & contrast instantly across your connected screens."
-                                                    : "Regola al volo luminosità e contrasto di tutti i display collegati.";
+                                                    ? "Adjust brightness & contrast instantly across desktop DDC/CI and laptop WMI screens."
+                                                    : "Regola al volo luminosità e contrasto di monitor DDC/CI esterni e schermi laptop WMI.";
                                                 color: #9da5b4;
                                                 font-size: 11px;
                                             }
                                         }
 
-                                        HorizontalLayout {
+                                        VerticalLayout {
                                             alignment: center;
-                                            spacing: 10px;
                                             TitaniumChip {
-                                                text: root.sync-monitors ? (root.is-en ? "✓ Sync Enabled" : "✓ Sync Attivo") : (root.is-en ? "⇄ Sync All" : "⇄ Sincronizza Tutti");
+                                                text: root.sync-monitors
+                                                    ? (root.is-en ? "Sync Active" : "Sync Attivo")
+                                                    : (root.is-en ? "Sync All" : "Sincronizza Tutti");
                                                 active: root.sync-monitors;
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
@@ -1381,234 +1901,64 @@ export component AppWindow inherits Window {
                                     }
                                 }
 
-                                // Blocchi affiancati dei monitor (disposizione orizzontale reattiva)
-                                HorizontalLayout {
-                                    spacing: 16px;
-                                    alignment: start;
+                                // Griglia adattiva a coppie (2 colonne per riga, zero overflow con 1..10 schermi)
+                                VerticalLayout {
+                                    spacing: 0px;
 
-                                    for mon[m-idx] in root.monitors : mon-block := Rectangle {
-                                        min-width: 330px;
-                                        horizontal-stretch: 1;
-                                        border-radius: 12px;
-                                        background: block-ta.has-hover ? #252a35 : #21252e;
-                                        border-width: 1px;
-                                        border-color: block-ta.has-hover ? root.accent-main.with-alpha(0.55) : #2d323e;
+                                    for row-idx in [0, 1, 2, 3, 4] : VerticalLayout {
+                                        padding-top: (row-idx > 0 && (row-idx * 2) < root.monitors.length) ? 14px : 0px;
 
-                                        animate background, border-color {
-                                            duration: SpringTheme.animations-enabled ? 200ms : 0ms;
-                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
-                                        }
-
-                                        block-ta := TouchArea {
-                                            width: 100%;
-                                            height: 100%;
-                                        }
-
-                                        VerticalLayout {
-                                            padding: 18px;
+                                        if (row-idx * 2) < root.monitors.length : HorizontalLayout {
                                             spacing: 14px;
 
-                                            // Intestazione Blocco Monitor
-                                            HorizontalLayout {
-                                                alignment: space-between;
-                                                VerticalLayout {
-                                                    spacing: 4px;
-                                                    alignment: start;
-                                                    Text {
-                                                        text: mon.name;
-                                                        color: #ffffff;
-                                                        font-size: 16px;
-                                                        font-weight: 700;
-                                                    }
-                                                    HorizontalLayout {
-                                                        spacing: 6px;
-                                                        alignment: start;
-                                                        Rectangle {
-                                                            width: 7px;
-                                                            height: 7px;
-                                                            y: (parent.height - self.height) / 2;
-                                                            border-radius: 3.5px;
-                                                            background: mon.ddc-supported ? #39d353 : #f59e0b;
-                                                        }
-                                                        Text {
-                                                            text: mon.ddc-supported ? "DDC/CI Attivo" : "Modalità Software";
-                                                            color: mon.ddc-supported ? #39d353 : #f59e0b;
-                                                            font-size: 11px;
-                                                            font-weight: 600;
-                                                        }
-                                                    }
-                                                }
-
-                                                // Pill Risoluzione / Info
-                                                Rectangle {
-                                                    height: 24px;
-                                                    border-radius: 6px;
-                                                    background: #1b1e27;
-                                                    border-width: 1px;
-                                                    border-color: #2c3240;
-                                                    HorizontalLayout {
-                                                        padding-left: 8px;
-                                                        padding-right: 8px;
-                                                        Text {
-                                                            text: mon.resolution;
-                                                            color: #9da5b4;
-                                                            font-size: 11px;
-                                                            font-weight: 600;
-                                                            vertical-alignment: center;
-                                                        }
-                                                    }
+                                            HomeMonitorCard {
+                                                horizontal-stretch: 1;
+                                                mon: root.monitors[row-idx * 2];
+                                                mon-index: row-idx * 2;
+                                                accent-main: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                is-en: root.is-en;
+                                                hide-unsupported: root.hide-unsupported;
+                                                set-vcp(id, code, val) => { root.set-vcp(id, code, val); }
+                                                open-details(idx) => {
+                                                    root.selected-monitor-index = idx;
+                                                    root.sync-current-values();
+                                                    root.active-view = "dashboard";
                                                 }
                                             }
 
-                                            // Slider Rapidi Luminosità & Contrasto
-                                            VerticalLayout {
-                                                spacing: 10px;
-
-                                                // Luminosità
-                                                Rectangle {
-                                                    background: transparent;
-                                                    TouchArea {
-                                                        width: 100%;
-                                                        height: 100%;
-                                                        scroll-event(ev) => {
-                                                            let d = ev.delta-y != 0px
-                                                                ? (ev.delta-y > 0px ? 2 : -2)
-                                                                : (ev.delta-x > 0px ? 2 : (ev.delta-x < 0px ? -2 : 0));
-                                                            if (d != 0) {
-                                                                let nv = Math.clamp(mon.brightness + d, 0, mon.brightness-max);
-                                                                if (nv != mon.brightness) {
-                                                                    root.set-vcp(mon.id, 16, nv);
-                                                                }
-                                                            }
-                                                            accept
-                                                        }
-                                                    }
-                                                    VerticalLayout {
-                                                        spacing: 4px;
-                                                        HorizontalLayout {
-                                                            alignment: space-between;
-                                                            Text {
-                                                                text: root.is-en ? "Brightness" : "Luminosità";
-                                                                color: #c5cbd6;
-                                                                font-size: 12px;
-                                                                font-weight: 600;
-                                                            }
-                                                            Text {
-                                                                text: "\{mon.brightness}%";
-                                                                color: root.accent-main;
-                                                                font-size: 12px;
-                                                                font-weight: 700;
-                                                            }
-                                                        }
-                                                        NeonSlider {
-                                                            value: mon.brightness;
-                                                            minimum: 0;
-                                                            maximum: mon.brightness-max;
-                                                            track-color: root.accent-main;
-                                                            glow-style: root.glow-style;
-                                                            changed(v) => { root.set-vcp(mon.id, 16, v); }
-                                                        }
-                                                    }
-                                                }
-
-                                                // Contrasto
-                                                Rectangle {
-                                                    background: transparent;
-                                                    TouchArea {
-                                                        width: 100%;
-                                                        height: 100%;
-                                                        scroll-event(ev) => {
-                                                            let d = ev.delta-y != 0px
-                                                                ? (ev.delta-y > 0px ? 2 : -2)
-                                                                : (ev.delta-x > 0px ? 2 : (ev.delta-x < 0px ? -2 : 0));
-                                                            if (d != 0) {
-                                                                let nv = Math.clamp(mon.contrast + d, 0, mon.contrast-max);
-                                                                if (nv != mon.contrast) {
-                                                                    root.set-vcp(mon.id, 18, nv);
-                                                                }
-                                                            }
-                                                            accept
-                                                        }
-                                                    }
-                                                    VerticalLayout {
-                                                        spacing: 4px;
-                                                        HorizontalLayout {
-                                                            alignment: space-between;
-                                                            Text {
-                                                                text: root.is-en ? "Contrast" : "Contrasto";
-                                                                color: #c5cbd6;
-                                                                font-size: 12px;
-                                                                font-weight: 600;
-                                                            }
-                                                            Text {
-                                                                text: "\{mon.contrast}%";
-                                                                color: root.accent-main;
-                                                                font-size: 12px;
-                                                                font-weight: 700;
-                                                            }
-                                                        }
-                                                        NeonSlider {
-                                                            value: mon.contrast;
-                                                            minimum: 0;
-                                                            maximum: mon.contrast-max;
-                                                            track-color: root.accent-main;
-                                                            glow-style: root.glow-style;
-                                                            changed(v) => { root.set-vcp(mon.id, 18, v); }
-                                                        }
-                                                    }
+                                            if (row-idx * 2 + 1) < root.monitors.length : HomeMonitorCard {
+                                                horizontal-stretch: 1;
+                                                mon: root.monitors[row-idx * 2 + 1];
+                                                mon-index: row-idx * 2 + 1;
+                                                accent-main: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                is-en: root.is-en;
+                                                hide-unsupported: root.hide-unsupported;
+                                                set-vcp(id, code, val) => { root.set-vcp(id, code, val); }
+                                                open-details(idx) => {
+                                                    root.selected-monitor-index = idx;
+                                                    root.sync-current-values();
+                                                    root.active-view = "dashboard";
                                                 }
                                             }
 
-                                            // Pulsante Azione: Apri Dettagli Monitor con rimbalzo a molla
-                                            Rectangle {
-                                                height: 36px;
-                                                border-radius: 8px;
-                                                background: btn-ta.has-hover ? root.accent-main : #2a303d;
-                                                border-width: 1px;
-                                                border-color: btn-ta.has-hover ? root.accent-main : #384050;
-
-                                                animate background, border-color {
-                                                    duration: SpringTheme.animations-enabled ? 160ms : 0ms;
-                                                    easing: cubic-bezier(0.34, 1.4, 0.64, 1);
-                                                }
-
-                                                HorizontalLayout {
-                                                    alignment: center;
-                                                    spacing: 6px;
-                                                    Text {
-                                                        text: root.is-en ? "Monitor Details & RGB ➔" : "Dettagli Monitor & RGB ➔";
-                                                        color: #ffffff;
-                                                        font-size: 12px;
-                                                        font-weight: 600;
-                                                        vertical-alignment: center;
-                                                    }
-                                                }
-
-                                                btn-ta := TouchArea {
-                                                    mouse-cursor: pointer;
-                                                    clicked => {
-                                                        root.selected-monitor-index = m-idx;
-                                                        root.sync-current-values();
-                                                        root.active-view = "dashboard";
-                                                    }
-                                                }
+                                            if root.monitors.length > 1 && (row-idx * 2 + 1) >= root.monitors.length : Rectangle {
+                                                horizontal-stretch: 1;
+                                                background: transparent;
                                             }
                                         }
                                     }
                                 }
                             }
-                            }
 
                             // ========================================================
-                            // VISTA 1: DASHBOARD PRINCIPALE (Come nel Mockup!)
+                            // VISTA 1: DASHBOARD PRINCIPALE (Hero + Quartetto + Guadagno RGB)
                             // ========================================================
-                            SpringViewContainer {
-                                is-active: root.active-view == "dashboard";
+                            if root.active-view == "dashboard" : VerticalLayout {
+                                spacing: root.is-compact ? 12px : 16px;
 
-                                VerticalLayout {
-                                    spacing: root.is-compact ? 12px : 16px;
-
-                                // 1. HERO HEADER CARD (Monitor Name, DDC/CI Active Badge, Spec Chip, 270° Arc Gauge)
+                                // 1. HERO HEADER CARD (Monitor Name, Status Badge, Spec Chip, SVG Arc Gauge)
                                 Rectangle {
                                     height: root.is-compact ? 132px : 148px;
                                     border-radius: 12px;
@@ -1623,8 +1973,9 @@ export component AppWindow inherits Window {
                                         padding-bottom: 16px;
                                         alignment: space-between;
 
-                                        // Colonna Sinistra: Nome Monitor + Badge DDC/CI + Risoluzione/Hz/Input
+                                        // Colonna Sinistra: Nome Monitor + Badge Hardware + Risoluzione/Hz/Input
                                         VerticalLayout {
+                                            horizontal-stretch: 1;
                                             alignment: center;
                                             spacing: 10px;
 
@@ -1633,9 +1984,10 @@ export component AppWindow inherits Window {
                                                 color: #f3f5f9;
                                                 font-size: root.is-compact ? 22px : 26px;
                                                 font-weight: 700;
+                                                overflow: elide;
                                             }
 
-                                            // Pill "DDC/CI Active" con pallino verde
+                                            // Pill stato connessione hardware
                                             HorizontalLayout {
                                                 alignment: start;
                                                 Rectangle {
@@ -1656,13 +2008,15 @@ export component AppWindow inherits Window {
                                                             height: 8px;
                                                             y: (parent.height - self.height) / 2;
                                                             border-radius: 4px;
-                                                            background: root.current-monitor.ddc-supported ? #39d353 : #f59e0b;
+                                                            background: root.current-monitor.ddc-supported ? #39d353 : (root.current-monitor.is-internal-wmi ? #38bdf8 : #f59e0b);
                                                         }
 
                                                         Text {
                                                             text: root.current-monitor.ddc-supported
                                                                 ? (root.is-en ? "DDC/CI Active" : "DDC/CI Attivo")
-                                                                : (root.is-en ? "Software Mode" : "Modalità Software");
+                                                                : (root.current-monitor.is-internal-wmi
+                                                                    ? (root.is-en ? "Internal WMI" : "WMI Integrato")
+                                                                    : (root.is-en ? "Read-Only" : "Solo Lettura"));
                                                             color: #dcdfe6;
                                                             font-size: 12px;
                                                             font-weight: 600;
@@ -1672,7 +2026,7 @@ export component AppWindow inherits Window {
                                                 }
                                             }
 
-                                            // Pill Risoluzione | Refresh | Input
+                                            // Pill Risoluzione | Refresh (| Input se supportato)
                                             HorizontalLayout {
                                                 alignment: start;
                                                 Rectangle {
@@ -1687,7 +2041,9 @@ export component AppWindow inherits Window {
                                                         padding-right: 12px;
                                                         alignment: center;
                                                         Text {
-                                                            text: "\{root.current-monitor.resolution} | \{root.active-input-label}";
+                                                            text: root.current-monitor.input-sup
+                                                                ? "\{root.current-monitor.resolution} | \{root.active-input-label}"
+                                                                : root.current-monitor.resolution;
                                                             color: #c5cbd6;
                                                             font-size: 12.5px;
                                                             font-weight: 500;
@@ -1698,7 +2054,7 @@ export component AppWindow inherits Window {
                                             }
                                         }
 
-                                        // Colonna Destra: Circular Arc Gauge 270°
+                                        // Colonna Destra: Circular SVG Arc Gauge 260°
                                         VerticalLayout {
                                             alignment: center;
                                             ArcGauge {
@@ -1707,18 +2063,24 @@ export component AppWindow inherits Window {
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
                                                 adjusted(v) => {
-                                                    root.set-vcp(root.current-monitor.id, 16, Math.round(v * root.current-monitor.brightness-max / 100));
+                                                    if (root.current-monitor.brightness-sup) {
+                                                        root.set-vcp(root.current-monitor.id, 16, Math.round(v * root.current-monitor.brightness-max / 100));
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
 
-                                // 2. QUARTETTO STAT CARDS (Brightness, Contrast, Sharpness, Saturation)
-                                HorizontalLayout {
+                                // 2. QUARTETTO STAT CARDS (filtrabile tramite hide-unsupported)
+                                if !root.hide-unsupported
+                                    || root.current-monitor.brightness-sup
+                                    || root.current-monitor.contrast-sup
+                                    || root.current-monitor.sharpness-sup
+                                    || root.current-monitor.saturation-sup : HorizontalLayout {
                                     spacing: root.is-compact ? 10px : 14px;
 
-                                    TitaniumStatCard {
+                                    if !root.hide-unsupported || root.current-monitor.brightness-sup : TitaniumStatCard {
                                         horizontal-stretch: 1;
                                         title: root.is-en ? "Brightness:" : "Luminosità:";
                                         value <=> root.current-brightness;
@@ -1730,7 +2092,7 @@ export component AppWindow inherits Window {
                                         changed(v) => { root.set-vcp(root.current-monitor.id, 16, v); }
                                     }
 
-                                    TitaniumStatCard {
+                                    if !root.hide-unsupported || root.current-monitor.contrast-sup : TitaniumStatCard {
                                         horizontal-stretch: 1;
                                         title: root.is-en ? "Contrast:" : "Contrasto:";
                                         value <=> root.current-contrast;
@@ -1742,7 +2104,7 @@ export component AppWindow inherits Window {
                                         changed(v) => { root.set-vcp(root.current-monitor.id, 18, v); }
                                     }
 
-                                    TitaniumStatCard {
+                                    if !root.hide-unsupported || root.current-monitor.sharpness-sup : TitaniumStatCard {
                                         horizontal-stretch: 1;
                                         title: root.is-en ? "Sharpness:" : "Nitidezza:";
                                         value <=> root.current-sharpness;
@@ -1754,7 +2116,7 @@ export component AppWindow inherits Window {
                                         changed(v) => { root.set-vcp(root.current-monitor.id, 135, v); }
                                     }
 
-                                    TitaniumStatCard {
+                                    if !root.hide-unsupported || root.current-monitor.saturation-sup : TitaniumStatCard {
                                         horizontal-stretch: 1;
                                         title: root.is-en ? "Saturation:" : "Saturazione:";
                                         value <=> root.current-saturation;
@@ -1768,7 +2130,7 @@ export component AppWindow inherits Window {
                                 }
 
                                 // 3. CARD RGB GAIN (Red, Green, Blue)
-                                Rectangle {
+                                if !root.hide-unsupported || root.current-monitor.rgb-sup : Rectangle {
                                     border-radius: 12px;
                                     background: #21252e;
                                     border-width: 1px;
@@ -1793,24 +2155,31 @@ export component AppWindow inherits Window {
 
                                             // Pulsante rapido Reset RGB 50%
                                             Rectangle {
-                                                height: 24px;
-                                                border-radius: 5px;
-                                                background: #2a2f3b;
+                                                height: 26px;
+                                                border-radius: 6px;
+                                                background: reset-rgb-ta.has-hover ? #343b4a : #2a2f3b;
                                                 border-width: 1px;
-                                                border-color: #363c4a;
+                                                border-color: reset-rgb-ta.has-hover ? root.accent-main.with-alpha(0.5) : #363c4a;
+
+                                                animate background, border-color {
+                                                    duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                                                    easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                                }
+
                                                 HorizontalLayout {
                                                     padding-left: 10px;
                                                     padding-right: 10px;
                                                     Text {
                                                         text: root.is-en ? "Reset 50%" : "Ripristina 50%";
-                                                        color: #b8bfcc;
+                                                        color: reset-rgb-ta.has-hover ? #ffffff : #b8bfcc;
                                                         font-size: 11px;
                                                         font-weight: 600;
                                                         vertical-alignment: center;
                                                     }
                                                 }
-                                                TouchArea {
+                                                reset-rgb-ta := TouchArea {
                                                     mouse-cursor: pointer;
+                                                    enabled: root.current-monitor.rgb-sup;
                                                     clicked => {
                                                         root.current-red-gain = 50;
                                                         root.current-green-gain = 50;
@@ -1823,14 +2192,24 @@ export component AppWindow inherits Window {
 
                                         // Canale RED
                                         HorizontalLayout {
-                                            spacing: 16px;
-                                            Text {
-                                                width: 68px;
-                                                text: root.is-en ? "Red" : "Rosso";
-                                                color: #c5cbd6;
-                                                font-size: 13px;
-                                                font-weight: 500;
-                                                vertical-alignment: center;
+                                            spacing: 12px;
+                                            HorizontalLayout {
+                                                width: 72px;
+                                                spacing: 8px;
+                                                Rectangle {
+                                                    width: 8px;
+                                                    height: 8px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    border-radius: 4px;
+                                                    background: #e85642;
+                                                }
+                                                Text {
+                                                    text: root.is-en ? "Red" : "Rosso";
+                                                    color: #c5cbd6;
+                                                    font-size: 13px;
+                                                    font-weight: 500;
+                                                    vertical-alignment: center;
+                                                }
                                             }
                                             NeonSlider {
                                                 horizontal-stretch: 1;
@@ -1839,6 +2218,7 @@ export component AppWindow inherits Window {
                                                 maximum: 100;
                                                 track-color: #e85642;
                                                 glow-style: root.glow-style;
+                                                enabled: root.current-monitor.rgb-sup;
                                                 changed(v) => { root.set-vcp(root.current-monitor.id, 22, v); }
                                             }
                                             Text {
@@ -1854,14 +2234,24 @@ export component AppWindow inherits Window {
 
                                         // Canale GREEN
                                         HorizontalLayout {
-                                            spacing: 16px;
-                                            Text {
-                                                width: 68px;
-                                                text: root.is-en ? "Green" : "Verde";
-                                                color: #c5cbd6;
-                                                font-size: 13px;
-                                                font-weight: 500;
-                                                vertical-alignment: center;
+                                            spacing: 12px;
+                                            HorizontalLayout {
+                                                width: 72px;
+                                                spacing: 8px;
+                                                Rectangle {
+                                                    width: 8px;
+                                                    height: 8px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    border-radius: 4px;
+                                                    background: #46b966;
+                                                }
+                                                Text {
+                                                    text: root.is-en ? "Green" : "Verde";
+                                                    color: #c5cbd6;
+                                                    font-size: 13px;
+                                                    font-weight: 500;
+                                                    vertical-alignment: center;
+                                                }
                                             }
                                             NeonSlider {
                                                 horizontal-stretch: 1;
@@ -1870,6 +2260,7 @@ export component AppWindow inherits Window {
                                                 maximum: 100;
                                                 track-color: #46b966;
                                                 glow-style: root.glow-style;
+                                                enabled: root.current-monitor.rgb-sup;
                                                 changed(v) => { root.set-vcp(root.current-monitor.id, 24, v); }
                                             }
                                             Text {
@@ -1885,14 +2276,24 @@ export component AppWindow inherits Window {
 
                                         // Canale BLUE
                                         HorizontalLayout {
-                                            spacing: 16px;
-                                            Text {
-                                                width: 68px;
-                                                text: root.is-en ? "Blue" : "Blu";
-                                                color: #c5cbd6;
-                                                font-size: 13px;
-                                                font-weight: 500;
-                                                vertical-alignment: center;
+                                            spacing: 12px;
+                                            HorizontalLayout {
+                                                width: 72px;
+                                                spacing: 8px;
+                                                Rectangle {
+                                                    width: 8px;
+                                                    height: 8px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    border-radius: 4px;
+                                                    background: #4a7ee5;
+                                                }
+                                                Text {
+                                                    text: root.is-en ? "Blue" : "Blu";
+                                                    color: #c5cbd6;
+                                                    font-size: 13px;
+                                                    font-weight: 500;
+                                                    vertical-alignment: center;
+                                                }
                                             }
                                             NeonSlider {
                                                 horizontal-stretch: 1;
@@ -1901,6 +2302,7 @@ export component AppWindow inherits Window {
                                                 maximum: 100;
                                                 track-color: #4a7ee5;
                                                 glow-style: root.glow-style;
+                                                enabled: root.current-monitor.rgb-sup;
                                                 changed(v) => { root.set-vcp(root.current-monitor.id, 26, v); }
                                             }
                                             Text {
@@ -1916,18 +2318,14 @@ export component AppWindow inherits Window {
                                     }
                                 }
                             }
-                            }
 
                             // ========================================================
-                            // VISTA 2: COLOR PROFILES, TEMPERATURA COLORE, AUDIO & INPUT
+                            // VISTA 2: PROFILI COLORE, TEMPERATURA, AUDIO & INPUT
                             // ========================================================
-                            SpringViewContainer {
-                                is-active: root.active-view == "profiles";
+                            if root.active-view == "profiles" : VerticalLayout {
+                                spacing: 14px;
 
-                                VerticalLayout {
-                                    spacing: 14px;
-
-                                // Header Monitor Selezionato
+                                // Header + Preset Rapidi + Temperatura Colore
                                 Rectangle {
                                     border-radius: 12px;
                                     background: #21252e;
@@ -1951,86 +2349,96 @@ export component AppWindow inherits Window {
                                             spacing: 10px;
                                             TitaniumChip {
                                                 horizontal-stretch: 1;
-                                                text: root.is-en ? "☀ Gaming Vivid (90/75)" : "☀ Gaming Vivace (90/75)";
+                                                text: root.is-en ? "Gaming Vivid (90/75)" : "Gaming Vivace (90/75)";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
                                                 clicked => {
                                                     root.current-brightness = 90;
-                                                    root.current-contrast = 75;
+                                                    if (root.current-monitor.contrast-sup) {
+                                                        root.current-contrast = 75;
+                                                    }
                                                     root.apply-preset(root.current-monitor.id, 90, 75);
                                                 }
                                             }
                                             TitaniumChip {
                                                 horizontal-stretch: 1;
-                                                text: root.is-en ? "◐ Standard sRGB (75/50)" : "◐ Standard sRGB (75/50)";
+                                                text: root.is-en ? "Standard sRGB (75/50)" : "Standard sRGB (75/50)";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
                                                 clicked => {
                                                     root.current-brightness = 75;
-                                                    root.current-contrast = 50;
+                                                    if (root.current-monitor.contrast-sup) {
+                                                        root.current-contrast = 50;
+                                                    }
                                                     root.apply-preset(root.current-monitor.id, 75, 50);
                                                 }
                                             }
                                             TitaniumChip {
                                                 horizontal-stretch: 1;
-                                                text: root.is-en ? "☾ Eye Care Night (35/45)" : "☾ Comfort Notturno (35/45)";
+                                                text: root.is-en ? "Eye Care Night (35/45)" : "Comfort Notturno (35/45)";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
                                                 clicked => {
                                                     root.current-brightness = 35;
-                                                    root.current-contrast = 45;
+                                                    if (root.current-monitor.contrast-sup) {
+                                                        root.current-contrast = 45;
+                                                    }
                                                     root.apply-preset(root.current-monitor.id, 35, 45);
                                                 }
                                             }
                                         }
 
-                                        Text {
-                                            text: root.is-en ? "Color Temperature (VCP 0x14)" : "Temperatura Colore (VCP 0x14)";
-                                            color: #c5cbd6;
-                                            font-size: 13px;
-                                            font-weight: 600;
-                                        }
-
-                                        HorizontalLayout {
+                                        if !root.hide-unsupported || root.current-monitor.color-temp-sup : VerticalLayout {
                                             spacing: 10px;
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: root.is-en ? "5000K Warm" : "5000K Caldo";
-                                                active: root.current-monitor.color-temp == 4;
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.set-vcp(root.current-monitor.id, 20, 4); }
+
+                                            Text {
+                                                text: root.is-en ? "Color Temperature (VCP 0x14)" : "Temperatura Colore (VCP 0x14)";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                font-weight: 600;
                                             }
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: "6500K Standard";
-                                                active: root.current-monitor.color-temp == 5;
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.set-vcp(root.current-monitor.id, 20, 5); }
-                                            }
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: root.is-en ? "9300K Cool" : "9300K Freddo";
-                                                active: root.current-monitor.color-temp == 8;
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.set-vcp(root.current-monitor.id, 20, 8); }
-                                            }
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: root.is-en ? "User RGB" : "Utente RGB";
-                                                active: root.current-monitor.color-temp == 11;
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.set-vcp(root.current-monitor.id, 20, 11); }
+
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                TitaniumChip {
+                                                    horizontal-stretch: 1;
+                                                    text: root.is-en ? "5000K Warm" : "5000K Caldo";
+                                                    active: root.current-monitor.color-temp == 4;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 20, 4); }
+                                                }
+                                                TitaniumChip {
+                                                    horizontal-stretch: 1;
+                                                    text: "6500K Standard";
+                                                    active: root.current-monitor.color-temp == 5;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 20, 5); }
+                                                }
+                                                TitaniumChip {
+                                                    horizontal-stretch: 1;
+                                                    text: root.is-en ? "9300K Cool" : "9300K Freddo";
+                                                    active: root.current-monitor.color-temp == 8;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 20, 8); }
+                                                }
+                                                TitaniumChip {
+                                                    horizontal-stretch: 1;
+                                                    text: root.is-en ? "User RGB" : "Utente RGB";
+                                                    active: root.current-monitor.color-temp == 11;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 20, 11); }
+                                                }
                                             }
                                         }
                                     }
                                 }
 
                                 // Card Audio Volume & Video Input Source
-                                Rectangle {
+                                if !root.hide-unsupported || root.current-monitor.volume-sup || root.current-monitor.input-sup : Rectangle {
                                     border-radius: 12px;
                                     background: #21252e;
                                     border-width: 1px;
@@ -2040,94 +2448,116 @@ export component AppWindow inherits Window {
                                         padding: 20px;
                                         spacing: 14px;
 
-                                        HorizontalLayout {
-                                            alignment: space-between;
+                                        if !root.hide-unsupported || root.current-monitor.volume-sup : VerticalLayout {
+                                            spacing: 10px;
+                                            HorizontalLayout {
+                                                alignment: space-between;
+                                                Text {
+                                                    text: root.is-en ? "Speaker Volume (VCP 0x62)" : "Volume Altoparlanti (VCP 0x62)";
+                                                    color: #e9edf5;
+                                                    font-size: 14px;
+                                                    font-weight: 600;
+                                                }
+                                                Text {
+                                                    text: root.current-monitor.volume-sup ? "\{root.current-volume}%" : "--";
+                                                    color: root.accent-main;
+                                                    font-size: 14px;
+                                                    font-weight: 700;
+                                                }
+                                            }
+
+                                            NeonSlider {
+                                                value <=> root.current-volume;
+                                                minimum: 0;
+                                                maximum: 100;
+                                                track-color: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                enabled: root.current-monitor.volume-sup;
+                                                changed(v) => { root.set-vcp(root.current-monitor.id, 98, v); }
+                                            }
+                                        }
+
+                                        if !root.hide-unsupported || root.current-monitor.input-sup : VerticalLayout {
+                                            spacing: 10px;
                                             Text {
-                                                text: root.is-en ? "Speaker Volume (VCP 0x62)" : "Volume Altoparlanti (VCP 0x62)";
-                                                color: #e9edf5;
-                                                font-size: 14px;
+                                                text: root.is-en ? "Video Input Source (VCP 0x60)" : "Sorgente Input Video (VCP 0x60)";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
                                                 font-weight: 600;
                                             }
-                                            Text {
-                                                text: "\{root.current-volume}%";
-                                                color: root.accent-main;
-                                                font-size: 14px;
-                                                font-weight: 700;
-                                            }
-                                        }
 
-                                        NeonSlider {
-                                            value <=> root.current-volume;
-                                            minimum: 0;
-                                            maximum: 100;
-                                            track-color: root.accent-main;
-                                            glow-style: root.glow-style;
-                                            changed(v) => { root.set-vcp(root.current-monitor.id, 98, v); }
-                                        }
-
-                                        Text {
-                                            text: root.is-en ? "Video Input Source (VCP 0x60)" : "Sorgente Input Video (VCP 0x60)";
-                                            color: #c5cbd6;
-                                            font-size: 13px;
-                                            font-weight: 600;
-                                        }
-
-                                        HorizontalLayout {
-                                            spacing: 10px;
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: "DisplayPort 1";
-                                                active: root.current-monitor.input-source == 15;
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.set-vcp(root.current-monitor.id, 96, 15); }
-                                            }
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: "DisplayPort 2";
-                                                active: root.current-monitor.input-source == 16;
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.set-vcp(root.current-monitor.id, 96, 16); }
-                                            }
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: "HDMI 1";
-                                                active: root.current-monitor.input-source == 17;
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.set-vcp(root.current-monitor.id, 96, 17); }
-                                            }
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: "HDMI 2";
-                                                active: root.current-monitor.input-source == 18;
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.set-vcp(root.current-monitor.id, 96, 18); }
-                                            }
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: "USB-C";
-                                                active: root.current-monitor.input-source == 27;
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.set-vcp(root.current-monitor.id, 96, 27); }
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                TitaniumChip {
+                                                    horizontal-stretch: 1;
+                                                    text: "DisplayPort 1";
+                                                    active: root.current-monitor.input-source == 15;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 96, 15); }
+                                                }
+                                                TitaniumChip {
+                                                    horizontal-stretch: 1;
+                                                    text: "DisplayPort 2";
+                                                    active: root.current-monitor.input-source == 16;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 96, 16); }
+                                                }
+                                                TitaniumChip {
+                                                    horizontal-stretch: 1;
+                                                    text: "HDMI 1";
+                                                    active: root.current-monitor.input-source == 17;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 96, 17); }
+                                                }
+                                                TitaniumChip {
+                                                    horizontal-stretch: 1;
+                                                    text: "HDMI 2";
+                                                    active: root.current-monitor.input-source == 18;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 96, 18); }
+                                                }
+                                                TitaniumChip {
+                                                    horizontal-stretch: 1;
+                                                    text: "USB-C";
+                                                    active: root.current-monitor.input-source == 27;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 96, 27); }
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
+
+                                if root.hide-unsupported && !root.current-monitor.volume-sup && !root.current-monitor.input-sup : Rectangle {
+                                    height: 54px;
+                                    border-radius: 12px;
+                                    background: #21252e;
+                                    border-width: 1px;
+                                    border-color: #2d323e;
+                                    Text {
+                                        text: root.is-en
+                                            ? "Audio volume & video input switching are hidden because this panel does not expose them via DDC/CI."
+                                            : "Volume altoparlanti e cambio ingresso video sono nascosti perché questo display non li espone via DDC/CI.";
+                                        color: #9da5b4;
+                                        font-size: 12px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
                             }
 
                             // ========================================================
                             // VISTA 3: ORDINA MONITOR (Gestione Ordine & Priorità)
                             // ========================================================
-                            SpringViewContainer {
-                                is-active: root.active-view == "reorder";
-
-                                VerticalLayout {
-                                    spacing: 14px;
+                            // VISTA 3: ORDINA MONITOR (Drag-and-Drop continuo su lista a passo fisso)
+                            // ========================================================
+                            if root.active-view == "reorder" : VerticalLayout {
+                                spacing: 14px;
 
                                 Rectangle {
                                     height: 58px;
@@ -2152,8 +2582,8 @@ export component AppWindow inherits Window {
                                             }
                                             Text {
                                                 text: root.is-en
-                                                    ? "Change display priority. The sequence here updates the sidebar and Home immediately."
-                                                    : "Modifica l'ordine dei monitor. L'elenco qui definito gestisce la sequenza nella barra laterale e nella Home.";
+                                                    ? "Press and drag any display card up or down to set priority across the sidebar and Home."
+                                                    : "Tieni premuta una card display e trascinala su o giù per aggiornare subito sidebar e Home.";
                                                 color: #9da5b4;
                                                 font-size: 11px;
                                             }
@@ -2161,158 +2591,153 @@ export component AppWindow inherits Window {
                                     }
                                 }
 
-                                VerticalLayout {
-                                    spacing: 10px;
+                                reorder-list := Rectangle {
+                                    height: root.monitors.length * 68px + Math.max(0, root.monitors.length - 1) * 10px;
+                                    background: transparent;
 
-                                    for mon[m-idx] in root.monitors : card := Rectangle {
-                                        height: 68px;
-                                        border-radius: 12px;
-                                        background: card-ta.pressed ? #2a303d : (card-ta.has-hover ? #252a35 : #21252e);
-                                        border-width: (card-ta.pressed || card-ta.has-hover) ? 1.5px : 1px;
-                                        border-color: card-ta.pressed ? root.accent-main : (card-ta.has-hover ? root.accent-main.with-alpha(0.4) : #2d323e);
+                                    property <int> dragging-row: -1;
+                                    property <int> hovered-row: drag-overlay.has-hover && root.monitors.length > 0
+                                        ? Math.clamp(Math.floor(drag-overlay.mouse-y / 78px), 0, root.monitors.length - 1)
+                                        : -1;
 
-                                        animate background, border-color {
-                                            duration: SpringTheme.animations-enabled ? 160ms : 0ms;
-                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
-                                        }
+                                    VerticalLayout {
+                                        width: 100%;
+                                        spacing: 10px;
 
-                                        card-ta := TouchArea {
-                                            width: 100%;
-                                            height: 100%;
-                                            mouse-cursor: self.pressed ? grabbing : (self.has-hover ? grab : default);
+                                        for mon[m-idx] in root.monitors : Rectangle {
+                                            property <bool> is-dragged: reorder-list.dragging-row == m-idx;
+                                            property <bool> is-hovered: reorder-list.dragging-row < 0 && reorder-list.hovered-row == m-idx;
 
-                                            property <bool> dragged-this-turn: false;
+                                            height: 68px;
+                                            border-radius: 12px;
+                                            background: is-dragged ? #2c3342 : (is-hovered ? #262b36 : #21252e);
+                                            border-width: (is-dragged || is-hovered) ? 1.5px : 1px;
+                                            border-color: is-dragged ? root.accent-main : (is-hovered ? root.accent-main.with-alpha(0.45) : #2d323e);
 
-                                            pointer-event(ev) => {
-                                                if (ev.kind == PointerEventKind.down) {
-                                                    self.dragged-this-turn = false;
-                                                } else if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
-                                                    self.dragged-this-turn = false;
-                                                }
+                                            animate background, border-color {
+                                                duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                                                easing: cubic-bezier(0.34, 1.4, 0.64, 1);
                                             }
-
-                                            moved => {
-                                                if (self.pressed && !self.dragged-this-turn) {
-                                                    let dy = self.mouse-y - self.pressed-y;
-                                                    if (dy > 38px && m-idx < root.monitors.length - 1) {
-                                                        self.dragged-this-turn = true;
-                                                        root.move-monitor(m-idx, 1);
-                                                    } else if (dy < -38px && m-idx > 0) {
-                                                        self.dragged-this-turn = true;
-                                                        root.move-monitor(m-idx, -1);
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        HorizontalLayout {
-                                            padding-left: 20px;
-                                            padding-right: 20px;
-                                            alignment: space-between;
 
                                             HorizontalLayout {
-                                                spacing: 16px;
-                                                alignment: start;
+                                                padding-left: 20px;
+                                                padding-right: 20px;
+                                                alignment: space-between;
 
-                                                // Badge posizione numerica (#1, #2...)
-                                                Rectangle {
-                                                    width: 34px;
-                                                    height: 34px;
-                                                    y: (parent.height - self.height) / 2;
-                                                    border-radius: 8px;
-                                                    background: (card-ta.pressed || card-ta.has-hover) ? root.accent-main.with-alpha(0.30) : root.accent-main.with-alpha(0.18);
-                                                    border-width: 1px;
-                                                    border-color: root.accent-main;
+                                                HorizontalLayout {
+                                                    spacing: 16px;
+                                                    alignment: start;
 
-                                                    animate background {
-                                                        duration: SpringTheme.animations-enabled ? 150ms : 0ms;
-                                                        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                                    // Badge posizione numerica (#1, #2...)
+                                                    Rectangle {
+                                                        width: 34px;
+                                                        height: 34px;
+                                                        y: (parent.height - self.height) / 2;
+                                                        border-radius: 8px;
+                                                        background: (is-dragged || is-hovered) ? root.accent-main.with-alpha(0.30) : root.accent-main.with-alpha(0.18);
+                                                        border-width: 1px;
+                                                        border-color: root.accent-main;
+
+                                                        Text {
+                                                            text: "#\{m-idx + 1}";
+                                                            color: root.accent-main;
+                                                            font-size: 13px;
+                                                            font-weight: 700;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
                                                     }
 
-                                                    Text {
-                                                        text: "#\{m-idx + 1}";
-                                                        color: root.accent-main;
-                                                        font-size: 13px;
-                                                        font-weight: 700;
-                                                        horizontal-alignment: center;
-                                                        vertical-alignment: center;
+                                                    VerticalLayout {
+                                                        alignment: center;
+                                                        spacing: 4px;
+
+                                                        Text {
+                                                            text: mon.name;
+                                                            color: #ffffff;
+                                                            font-size: 15px;
+                                                            font-weight: 700;
+                                                        }
+                                                        Text {
+                                                            text: mon.ddc-supported
+                                                                ? "\{mon.brand} · \{mon.resolution} · DDC/CI Attivo"
+                                                                : (mon.is-internal-wmi
+                                                                    ? "\{mon.brand} · \{mon.resolution} · WMI Integrato"
+                                                                    : "\{mon.brand} · \{mon.resolution} · Solo Lettura");
+                                                            color: #9da5b4;
+                                                            font-size: 11px;
+                                                        }
                                                     }
                                                 }
 
-                                                VerticalLayout {
+                                                // Maniglia di presa vettoriale a 6 punti
+                                                HorizontalLayout {
+                                                    spacing: 10px;
                                                     alignment: center;
-                                                    spacing: 4px;
 
                                                     Text {
-                                                        text: mon.name;
-                                                        color: #ffffff;
-                                                        font-size: 15px;
-                                                        font-weight: 700;
+                                                        text: root.is-en ? "Drag to reorder" : "Trascina per ordinare";
+                                                        color: is-dragged ? root.accent-main : (is-hovered ? #c3c9d5 : #6c7382);
+                                                        font-size: 11.5px;
+                                                        font-weight: 500;
+                                                        vertical-alignment: center;
                                                     }
-                                                    Text {
-                                                        text: mon.ddc-supported
-                                                            ? "\{mon.brand} · \{mon.resolution} · DDC/CI Attivo"
-                                                            : "\{mon.brand} · \{mon.resolution} · Software Mode";
-                                                        color: #9da5b4;
-                                                        font-size: 11px;
+
+                                                    Rectangle {
+                                                        width: 34px;
+                                                        height: 34px;
+                                                        y: (parent.height - self.height) / 2;
+                                                        border-radius: 7px;
+                                                        background: is-dragged ? root.accent-main.with-alpha(0.25) : (is-hovered ? #2e3442 : #1c2028);
+                                                        border-width: 1px;
+                                                        border-color: is-dragged ? root.accent-main : (is-hovered ? #40495c : #252a35);
+
+                                                        DragGripGlyph {
+                                                            x: (parent.width - self.width) / 2;
+                                                            y: (parent.height - self.height) / 2;
+                                                            icon-color: is-dragged ? root.accent-main : (is-hovered ? #ffffff : #8a92a2);
+                                                        }
                                                     }
                                                 }
                                             }
+                                        }
+                                    }
 
-                                            // Maniglia di presa per riordinare (Drag Handle)
-                                            HorizontalLayout {
-                                                spacing: 10px;
-                                                alignment: center;
+                                    // Overlay unico per trascinamento continuo senza perdere la cattura del puntatore
+                                    drag-overlay := TouchArea {
+                                        width: 100%;
+                                        height: 100%;
+                                        mouse-cursor: reorder-list.dragging-row >= 0 ? grabbing : (reorder-list.hovered-row >= 0 ? grab : default);
 
-                                                Text {
-                                                    text: root.is-en ? "Drag to reorder" : "Trascina per ordinare";
-                                                    color: card-ta.pressed ? root.accent-main : (card-ta.has-hover ? #c3c9d5 : #6c7382);
-                                                    font-size: 11.5px;
-                                                    font-weight: 500;
-                                                    vertical-alignment: center;
+                                        pointer-event(ev) => {
+                                            if (ev.kind == PointerEventKind.down && root.monitors.length > 0) {
+                                                reorder-list.dragging-row = Math.clamp(Math.floor(self.pressed-y / 78px), 0, root.monitors.length - 1);
+                                            } else if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
+                                                reorder-list.dragging-row = -1;
+                                            }
+                                        }
 
-                                                    animate color {
-                                                        duration: SpringTheme.animations-enabled ? 150ms : 0ms;
-                                                    }
-                                                }
-
-                                                Rectangle {
-                                                    width: 34px;
-                                                    height: 34px;
-                                                    border-radius: 7px;
-                                                    background: card-ta.pressed ? root.accent-main.with-alpha(0.25) : (card-ta.has-hover ? #2e3442 : #1c2028);
-                                                    border-width: 1px;
-                                                    border-color: card-ta.pressed ? root.accent-main : (card-ta.has-hover ? #40495c : #252a35);
-
-                                                    animate background, border-color {
-                                                        duration: SpringTheme.animations-enabled ? 150ms : 0ms;
-                                                        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
-                                                    }
-
-                                                    Text {
-                                                        text: "⠿";
-                                                        color: card-ta.pressed ? root.accent-main : (card-ta.has-hover ? #ffffff : #8a92a2);
-                                                        font-size: 18px;
-                                                        font-weight: 700;
-                                                        horizontal-alignment: center;
-                                                        vertical-alignment: center;
-                                                    }
+                                        moved => {
+                                            if (self.pressed && reorder-list.dragging-row >= 0 && root.monitors.length > 1) {
+                                                let target-row = Math.clamp(Math.floor(self.mouse-y / 78px), 0, root.monitors.length - 1);
+                                                if (target-row > reorder-list.dragging-row) {
+                                                    root.move-monitor(reorder-list.dragging-row, 1);
+                                                    reorder-list.dragging-row += 1;
+                                                } else if (target-row < reorder-list.dragging-row) {
+                                                    root.move-monitor(reorder-list.dragging-row, -1);
+                                                    reorder-list.dragging-row -= 1;
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                            }
 
                             // ========================================================
                             // VISTA 4: IMPOSTAZIONI (Organizzate in 4 Card Tematiche)
                             // ========================================================
-                            SpringViewContainer {
-                                is-active: root.active-view == "settings";
-
-                                VerticalLayout {
-                                    spacing: 14px;
+                            if root.active-view == "settings" : VerticalLayout {
+                                spacing: 14px;
 
                                 // CARD 1: SISTEMA & COMPORTAMENTO
                                 Rectangle {
@@ -2325,11 +2750,20 @@ export component AppWindow inherits Window {
                                         padding: 20px;
                                         spacing: 14px;
 
-                                        Text {
-                                            text: root.is-en ? "💻 System & Behavior" : "💻 Sistema & Comportamento";
-                                            color: #ffffff;
-                                            font-size: 15px;
-                                            font-weight: 700;
+                                        HorizontalLayout {
+                                            spacing: 10px;
+                                            alignment: start;
+                                            CategoryBadge {
+                                                accent: root.accent-main;
+                                                kind: "system";
+                                            }
+                                            Text {
+                                                text: root.is-en ? "System & Behavior" : "Sistema & Comportamento";
+                                                color: #ffffff;
+                                                font-size: 15px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
                                         }
 
                                         HorizontalLayout {
@@ -2385,7 +2819,7 @@ export component AppWindow inherits Window {
                                     }
                                 }
 
-                                // CARD 2: ASPETTO & PERSONALIZZAZIONE CYBERPUNK
+                                // CARD 2: ASPETTO & PERSONALIZZAZIONE
                                 Rectangle {
                                     border-radius: 12px;
                                     background: #21252e;
@@ -2396,11 +2830,20 @@ export component AppWindow inherits Window {
                                         padding: 20px;
                                         spacing: 14px;
 
-                                        Text {
-                                            text: root.is-en ? "🎨 Cyberpunk Style & Accent Theme" : "🎨 Aspetto & Personalizzazione Cyberpunk";
-                                            color: #ffffff;
-                                            font-size: 15px;
-                                            font-weight: 700;
+                                        HorizontalLayout {
+                                            spacing: 10px;
+                                            alignment: start;
+                                            CategoryBadge {
+                                                accent: root.accent-main;
+                                                kind: "style";
+                                            }
+                                            Text {
+                                                text: root.is-en ? "Appearance & Accent Theme" : "Aspetto & Personalizzazione";
+                                                color: #ffffff;
+                                                font-size: 15px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
                                         }
 
                                         // Palette Colore d'Accento
@@ -2413,43 +2856,43 @@ export component AppWindow inherits Window {
 
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            TitaniumChip {
+                                            AccentSwatchChip {
                                                 horizontal-stretch: 1;
-                                                text: "● Coral Neon";
+                                                text: "Coral Neon";
                                                 active: root.accent-palette == "coral";
-                                                accent: #f05a46;
+                                                swatch-color: #f05a46;
                                                 glow-style: root.glow-style;
                                                 clicked => { root.accent-palette = "coral"; root.save-settings(); }
                                             }
-                                            TitaniumChip {
+                                            AccentSwatchChip {
                                                 horizontal-stretch: 1;
-                                                text: "● Cyber Cyan";
+                                                text: "Cyber Cyan";
                                                 active: root.accent-palette == "cyan";
-                                                accent: #00d8ff;
+                                                swatch-color: #00d8ff;
                                                 glow-style: root.glow-style;
                                                 clicked => { root.accent-palette = "cyan"; root.save-settings(); }
                                             }
-                                            TitaniumChip {
+                                            AccentSwatchChip {
                                                 horizontal-stretch: 1;
-                                                text: "● Emerald";
+                                                text: "Emerald";
                                                 active: root.accent-palette == "emerald";
-                                                accent: #00e676;
+                                                swatch-color: #00e676;
                                                 glow-style: root.glow-style;
                                                 clicked => { root.accent-palette = "emerald"; root.save-settings(); }
                                             }
-                                            TitaniumChip {
+                                            AccentSwatchChip {
                                                 horizontal-stretch: 1;
-                                                text: "● Electric Violet";
+                                                text: "Electric Violet";
                                                 active: root.accent-palette == "violet";
-                                                accent: #b356ff;
+                                                swatch-color: #b356ff;
                                                 glow-style: root.glow-style;
                                                 clicked => { root.accent-palette = "violet"; root.save-settings(); }
                                             }
-                                            TitaniumChip {
+                                            AccentSwatchChip {
                                                 horizontal-stretch: 1;
-                                                text: "● Amber Gold";
+                                                text: "Amber Gold";
                                                 active: root.accent-palette == "amber";
-                                                accent: #ffab00;
+                                                swatch-color: #ffab00;
                                                 glow-style: root.glow-style;
                                                 clicked => { root.accent-palette = "amber"; root.save-settings(); }
                                             }
@@ -2457,7 +2900,7 @@ export component AppWindow inherits Window {
 
                                         // Intensità Bagliore Neon
                                         Text {
-                                            text: root.is-en ? "Active Border & Slider Glow Intensity" : "Intensità Bagliore Neon (Bordi & Cursori)";
+                                            text: root.is-en ? "Active Border & Slider Glow Intensity" : "Intensità Bagliore (Bordi & Cursori)";
                                             color: #9da5b4;
                                             font-size: 12px;
                                             font-weight: 600;
@@ -2483,7 +2926,7 @@ export component AppWindow inherits Window {
                                             }
                                             TitaniumChip {
                                                 horizontal-stretch: 1;
-                                                text: root.is-en ? "Intense Gaming Neon" : "Intenso (Gaming Neon)";
+                                                text: root.is-en ? "Intense Gaming" : "Intenso (Gaming)";
                                                 active: root.glow-style == "intense";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
@@ -2519,7 +2962,6 @@ export component AppWindow inherits Window {
                                             }
                                         }
 
-                                        // Separatore
                                         Rectangle { height: 1px; background: #2e3442; }
 
                                         // Toggle Trasparenza Windows Acrylic (DWM)
@@ -2544,11 +2986,12 @@ export component AppWindow inherits Window {
                                             }
                                             TitaniumToggle {
                                                 checked <=> root.acrylic-enabled;
+                                                accent: root.accent-main;
                                                 toggled(v) => { root.toggle-acrylic(v); }
                                             }
                                         }
 
-                                        // Animazioni Fluide a Molla (Spring animations)
+                                        // Animazioni Fluide a Molla
                                         HorizontalLayout {
                                             alignment: space-between;
                                             VerticalLayout {
@@ -2562,8 +3005,8 @@ export component AppWindow inherits Window {
                                                 }
                                                 Text {
                                                     text: root.is-en
-                                                        ? "Reactive spring bounce on sliders, views & cards (disable to save RAM & CPU)"
-                                                        : "Transizioni e controlli elastici reattivi (disattiva per massime prestazioni e zero RAM)";
+                                                        ? "Reactive spring bounce on sliders & cards (disable to save RAM & CPU)"
+                                                        : "Transizioni e controlli elastici reattivi (disattiva per zero overhead)";
                                                     color: #8c95a6;
                                                     font-size: 11px;
                                                 }
@@ -2577,7 +3020,7 @@ export component AppWindow inherits Window {
                                     }
                                 }
 
-                                // CARD 3: HARDWARE DDC/CI & LINGUA
+                                // CARD 3: HARDWARE DDC/CI & WMI + LINGUA
                                 Rectangle {
                                     border-radius: 12px;
                                     background: #21252e;
@@ -2588,11 +3031,20 @@ export component AppWindow inherits Window {
                                         padding: 20px;
                                         spacing: 14px;
 
-                                        Text {
-                                            text: root.is-en ? "🌐 Hardware DDC/CI & Language" : "🌐 Hardware DDC/CI & Lingua";
-                                            color: #ffffff;
-                                            font-size: 15px;
-                                            font-weight: 700;
+                                        HorizontalLayout {
+                                            spacing: 10px;
+                                            alignment: start;
+                                            CategoryBadge {
+                                                accent: root.accent-main;
+                                                kind: "hardware";
+                                            }
+                                            Text {
+                                                text: root.is-en ? "Hardware DDC/CI, WMI & Language" : "Hardware DDC/CI, WMI & Lingua";
+                                                color: #ffffff;
+                                                font-size: 15px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
                                         }
 
                                         HorizontalLayout {
@@ -2607,14 +3059,14 @@ export component AppWindow inherits Window {
                                             HorizontalLayout {
                                                 spacing: 8px;
                                                 TitaniumChip {
-                                                    text: "🇮🇹 Italiano";
+                                                    text: "IT · Italiano";
                                                     active: root.lang == "it";
                                                     accent: root.accent-main;
                                                     glow-style: root.glow-style;
                                                     clicked => { root.lang = "it"; root.save-settings(); }
                                                 }
                                                 TitaniumChip {
-                                                    text: "🇬🇧 English";
+                                                    text: "EN · English";
                                                     active: root.lang == "en";
                                                     accent: root.accent-main;
                                                     glow-style: root.glow-style;
@@ -2627,7 +3079,7 @@ export component AppWindow inherits Window {
                                             alignment: space-between;
                                             Text {
                                                 text: root.is-en
-                                                    ? "Hide controls unsupported by DDC/CI hardware"
+                                                    ? "Hide controls unsupported by display hardware"
                                                     : "Nascondi controlli non supportati dall'hardware";
                                                 color: #c5cbd6;
                                                 font-size: 13px;
@@ -2651,7 +3103,7 @@ export component AppWindow inherits Window {
                                                 vertical-alignment: center;
                                             }
                                             TitaniumChip {
-                                                text: root.is-en ? "↻ Rescan Hardware Now" : "↻ Rileva Monitor Ora";
+                                                text: root.is-en ? "Rescan Hardware Now" : "Rileva Monitor Ora";
                                                 accent: root.accent-main;
                                                 glow-style: root.glow-style;
                                                 clicked => { root.rescan-monitors(); }
@@ -2671,11 +3123,20 @@ export component AppWindow inherits Window {
                                         padding: 20px;
                                         spacing: 14px;
 
-                                        Text {
-                                            text: root.is-en ? "🚀 Software Updates & Application Info" : "🚀 Aggiornamenti Software & Informazioni";
-                                            color: #ffffff;
-                                            font-size: 15px;
-                                            font-weight: 700;
+                                        HorizontalLayout {
+                                            spacing: 10px;
+                                            alignment: start;
+                                            CategoryBadge {
+                                                accent: root.accent-main;
+                                                kind: "updates";
+                                            }
+                                            Text {
+                                                text: root.is-en ? "Software Updates & Info" : "Aggiornamenti Software & Info";
+                                                color: #ffffff;
+                                                font-size: 15px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
                                         }
 
                                         HorizontalLayout {
@@ -2746,9 +3207,9 @@ export component AppWindow inherits Window {
                                     }
                                 }
                             }
+                                }
                             }
                         }
-                    }
                     }
                 }
             }
@@ -2757,10 +3218,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.11 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
+// FINESTRA INSTALLER SETUP v1.13 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.11";
+    title: "Installazione Monitor Manager v1.13";
     preferred-width: 520px;
     preferred-height: 410px;
     background: transparent;
@@ -2771,7 +3232,7 @@ export component SetupWindow inherits Window {
     in-out property <bool> opt-launch: true;
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.09 (Dark Matte Titanium & Acrylic)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.13 (Dark Matte Titanium & Acrylic)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -2804,7 +3265,7 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.09";
+                        text: "Monitor Manager v1.13";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
@@ -2891,7 +3352,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione..." : "Installa v1.09 Ora";
+                    text: root.installing ? "Installazione..." : "Installa v1.13 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;
