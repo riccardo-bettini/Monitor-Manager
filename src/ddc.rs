@@ -1,9 +1,19 @@
+use crate::monitor_profiles::{
+    collect_probe_codes, describe_vcp, is_write_only_reset, parse_capabilities_resilient,
+    DiscoveredVcp,
+};
+use crate::win_display::{
+    apply_software_lut, query_hdr_map, query_refresh_rates, reset_software_lut, set_hdr_enabled,
+    set_refresh_rate, DisplayOsInfo, SoftwareLutSettings,
+};
+use ddc::Ddc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use windows_sys::Win32::Devices::Display::{
-    DestroyPhysicalMonitors, DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes,
+    CapabilitiesRequestAndCapabilitiesReply, DestroyPhysicalMonitors, DisplayConfigGetDeviceInfo,
+    GetCapabilitiesStringLength, GetDisplayConfigBufferSizes,
     GetNumberOfPhysicalMonitorsFromHMONITOR, GetPhysicalMonitorsFromHMONITOR,
     GetVCPFeatureAndVCPFeatureReply, QueryDisplayConfig, SetVCPFeature,
     DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
@@ -70,6 +80,16 @@ pub struct MonitorInfo {
     pub is_internal_wmi: bool,
     #[serde(default)]
     pub wmi_instance: String,
+    #[serde(default)]
+    pub os_info: DisplayOsInfo,
+    #[serde(default)]
+    pub discovered_vcps: Vec<DiscoveredVcp>,
+    #[serde(default)]
+    pub capabilities_raw: String,
+    #[serde(default)]
+    pub mccs_version: String,
+    #[serde(default)]
+    pub software_lut: SoftwareLutSettings,
 }
 
 struct PhysicalHandleWrap(HANDLE);
@@ -250,9 +270,271 @@ impl DdcEngine {
         }
         cvar.notify_one();
     }
+
+    /// Esegue in background la scoperta completa delle Capabilities MCCS e di tutti i VCP supportati.
+    pub fn probe_capabilities_for_all(&self) -> Vec<MonitorInfo> {
+        let targets: Vec<(usize, isize, String, String, bool)> = {
+            let guard = self.monitors.lock().unwrap();
+            guard
+                .iter()
+                .filter(|m| !m.info.is_internal_wmi && m.handle.0 as isize != 0)
+                .map(|m| {
+                    (
+                        m.info.id,
+                        m.handle.0 as isize,
+                        m.info.brand.clone(),
+                        m.info.model_code.clone(),
+                        m.info.ddc_supported,
+                    )
+                })
+                .collect()
+        };
+
+        // Anche ddc-hi può scoprire monitor extra o leggere capabilities quando Dxva2 standard fatica
+        let hi_caps_fallback: Vec<(String, String)> = std::panic::catch_unwind(|| {
+            ddc_hi::Display::enumerate()
+                .into_iter()
+                .filter_map(|mut d| {
+                    let label = format!(
+                        "{} {}",
+                        d.info.manufacturer_id.clone().unwrap_or_default(),
+                        d.info.model_name.clone().unwrap_or_else(|| d.info.id.clone())
+                    );
+                    d.handle
+                        .capabilities_string()
+                        .ok()
+                        .map(|bytes| (label.to_uppercase(), String::from_utf8_lossy(&bytes).into_owned()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+        let mut joins = Vec::new();
+        for (id, h_int, brand, model_code, _already_ddc) in targets {
+            let fallback_pool = hi_caps_fallback.clone();
+            joins.push(thread::spawn(move || {
+                let h = h_int as HANDLE;
+                let mut raw_caps = read_capabilities_string(h).unwrap_or_default();
+                if raw_caps.is_empty() {
+                    let b_up = brand.to_uppercase();
+                    if let Some((_, s)) = fallback_pool
+                        .iter()
+                        .find(|(lbl, _)| !b_up.is_empty() && lbl.contains(&b_up))
+                    {
+                        raw_caps = s.clone();
+                    }
+                }
+
+                let (caps_opt, db) = parse_capabilities_resilient(&raw_caps);
+                let mccs_ver = caps_opt
+                    .as_ref()
+                    .and_then(|c| c.mccs_version.as_ref())
+                    .map(|v| format!("{}.{}", v.major, v.minor))
+                    .unwrap_or_default();
+
+                let probe_codes = collect_probe_codes(caps_opt.as_ref(), &brand, &model_code);
+                let mut discovered_vcps = Vec::new();
+
+                for code in probe_codes {
+                    let cap_values = caps_opt
+                        .as_ref()
+                        .and_then(|c| c.vcp_features.get(&code))
+                        .map(|d| &d.values);
+                    let declared_in_caps = caps_opt
+                        .as_ref()
+                        .is_some_and(|c| c.vcp_features.contains_key(&code));
+
+                    if is_write_only_reset(code) {
+                        if declared_in_caps {
+                            let meta = describe_vcp(code, &brand, &db, cap_values);
+                            discovered_vcps.push(DiscoveredVcp {
+                                code,
+                                name_it: meta.name_it,
+                                name_en: meta.name_en,
+                                category: meta.category,
+                                is_continuous: false,
+                                current: 1,
+                                max: 1,
+                                is_read_only: false,
+                                is_critical: true,
+                                from_capabilities: true,
+                                options: vec![crate::monitor_profiles::VcpValueOption {
+                                    value: 1,
+                                    label: "Esegui Reset".to_string(),
+                                }],
+                            });
+                        }
+                        continue;
+                    }
+
+                    let vcp = read_vcp(h, code, 100);
+                    if vcp.supported {
+                        let meta = describe_vcp(code, &brand, &db, cap_values);
+                        discovered_vcps.push(DiscoveredVcp {
+                            code,
+                            name_it: meta.name_it,
+                            name_en: meta.name_en,
+                            category: meta.category,
+                            is_continuous: meta.is_continuous,
+                            current: vcp.current,
+                            max: vcp.max.max(1),
+                            is_read_only: meta.is_read_only,
+                            is_critical: meta.is_critical,
+                            from_capabilities: declared_in_caps,
+                            options: meta.options,
+                        });
+                    }
+                }
+
+                discovered_vcps.sort_by_key(|v| {
+                    let cat_rank = match v.category.as_str() {
+                        "image" => 0,
+                        "color" => 1,
+                        "gaming" => 2,
+                        "audio_input" => 3,
+                        _ => 4,
+                    };
+                    (cat_rank, v.code)
+                });
+
+                (id, raw_caps, mccs_ver, discovered_vcps)
+            }));
+        }
+
+        let mut results = Vec::new();
+        for j in joins {
+            if let Ok(item) = j.join() {
+                results.push(item);
+            }
+        }
+
+        let mut guard = self.monitors.lock().unwrap();
+        for (id, raw_caps, mccs_ver, vcps) in results {
+            if let Some(m) = guard.iter_mut().find(|m| m.info.id == id) {
+                if !vcps.is_empty() {
+                    m.info.ddc_supported = true;
+                }
+                m.info.capabilities_raw = raw_caps;
+                m.info.mccs_version = mccs_ver;
+                m.info.discovered_vcps = vcps;
+            }
+        }
+        guard.iter().map(|m| m.info.clone()).collect()
+    }
+
+    pub fn set_monitor_refresh_rate(&self, monitor_id: usize, hz: u32) -> Result<Vec<MonitorInfo>, String> {
+        let gdi_device = {
+            let guard = self.monitors.lock().unwrap();
+            guard
+                .iter()
+                .find(|m| m.info.id == monitor_id)
+                .map(|m| m.info.gdi_device.clone())
+                .ok_or_else(|| "Monitor non trovato".to_string())?
+        };
+        set_refresh_rate(&gdi_device, hz)?;
+        let (cur_hz, avail) = query_refresh_rates(&gdi_device);
+        let mut guard = self.monitors.lock().unwrap();
+        if let Some(m) = guard.iter_mut().find(|m| m.info.id == monitor_id) {
+            m.info.os_info.current_refresh_rate = cur_hz;
+            m.info.os_info.available_refresh_rates = avail;
+            if let Some((base_res, _)) = m.info.resolution.split_once(" | ") {
+                if cur_hz > 0 {
+                    m.info.resolution = format!("{} | {}Hz", base_res, cur_hz);
+                }
+            }
+        }
+        Ok(guard.iter().map(|m| m.info.clone()).collect())
+    }
+
+    pub fn set_monitor_hdr(&self, monitor_id: usize, enabled: bool) -> Result<Vec<MonitorInfo>, String> {
+        let gdi_device = {
+            let guard = self.monitors.lock().unwrap();
+            guard
+                .iter()
+                .find(|m| m.info.id == monitor_id)
+                .map(|m| m.info.gdi_device.clone())
+                .ok_or_else(|| "Monitor non trovato".to_string())?
+        };
+        set_hdr_enabled(&gdi_device, enabled)?;
+        let hdr_map = query_hdr_map();
+        let mut guard = self.monitors.lock().unwrap();
+        if let Some(m) = guard.iter_mut().find(|m| m.info.id == monitor_id) {
+            if let Some(&(sup, en)) = hdr_map.get(&gdi_device) {
+                m.info.os_info.hdr_supported = sup;
+                m.info.os_info.hdr_enabled = en;
+            } else {
+                m.info.os_info.hdr_enabled = enabled;
+            }
+        }
+        Ok(guard.iter().map(|m| m.info.clone()).collect())
+    }
+
+    pub fn update_software_lut(&self, monitor_id: usize, cfg: SoftwareLutSettings) -> Vec<MonitorInfo> {
+        let gdi_device = {
+            let mut guard = self.monitors.lock().unwrap();
+            let mut dev = String::new();
+            if let Some(m) = guard.iter_mut().find(|m| m.info.id == monitor_id) {
+                m.info.software_lut = cfg.clone();
+                dev = m.info.gdi_device.clone();
+            }
+            dev
+        };
+        if !gdi_device.is_empty() {
+            let _ = apply_software_lut(&gdi_device, &cfg);
+        }
+        self.get_cached_monitors()
+    }
+
+    pub fn reset_monitor_software_lut(&self, monitor_id: usize) -> Vec<MonitorInfo> {
+        let gdi_device = {
+            let mut guard = self.monitors.lock().unwrap();
+            let mut dev = String::new();
+            if let Some(m) = guard.iter_mut().find(|m| m.info.id == monitor_id) {
+                m.info.software_lut = SoftwareLutSettings::default();
+                dev = m.info.gdi_device.clone();
+            }
+            dev
+        };
+        if !gdi_device.is_empty() {
+            let _ = reset_software_lut(&gdi_device);
+        }
+        self.get_cached_monitors()
+    }
+}
+
+fn read_capabilities_string(handle: HANDLE) -> Option<String> {
+    if handle.is_null() {
+        return None;
+    }
+    unsafe {
+        let mut len: u32 = 0;
+        if GetCapabilitiesStringLength(handle, &mut len) == 0 || len == 0 || len > 16384 {
+            return None;
+        }
+        let mut buf: Vec<u8> = vec![0u8; len as usize];
+        if CapabilitiesRequestAndCapabilitiesReply(handle, buf.as_mut_ptr(), len) == 0 {
+            return None;
+        }
+        let nul_pos = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+        let s = String::from_utf8_lossy(&buf[..nul_pos]).trim().to_string();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
+    }
 }
 
 fn update_cached_vcp(info: &mut MonitorInfo, vcp_code: u8, value: u32) {
+    for dv in &mut info.discovered_vcps {
+        if dv.code == vcp_code {
+            dv.current = if dv.is_continuous {
+                value.min(dv.max.max(1))
+            } else {
+                value
+            };
+        }
+    }
     let feature = match vcp_code {
         VCP_BRIGHTNESS => &mut info.brightness,
         VCP_CONTRAST => &mut info.contrast,
@@ -405,6 +687,8 @@ fn parse_brand_and_model(
                 "AOC".to_string()
             } else if up.contains("KTC") || up.starts_with("H27") || up.starts_with("M27") || up.starts_with("G27") {
                 "KTC".to_string()
+            } else if up.contains("PHILIPS") || up.contains("EVNIA") || up.starts_with("PHL") {
+                "Philips".to_string()
             } else if !pnp_code.is_empty() {
                 pnp_code.clone()
             } else {
@@ -451,11 +735,15 @@ fn read_vcp(handle: HANDLE, code: u8, default_max: u32) -> VcpFeatureState {
             &mut max,
         );
         if ok != 0 {
-            let safe_max = if max == 0 { default_max } else { max };
+            let safe_max = if max == 0 {
+                default_max.max(current).max(1)
+            } else {
+                max.max(current).max(1)
+            };
             VcpFeatureState {
                 code,
                 supported: true,
-                current: current.min(safe_max),
+                current,
                 max: safe_max,
             }
         } else {
@@ -547,6 +835,7 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
 
     // Interroghiamo ogni monitor in parallelo su thread dedicati per dimezzare i tempi di avvio
     let wmi_panels = crate::wmi_brightness::query_wmi_panels();
+    let hdr_map = query_hdr_map();
     let mut join_handles = Vec::new();
     for (idx, (id, entry, raw_handle, desc)) in handles_to_probe.into_iter().enumerate() {
         let edid = edid_map.get(&entry.gdi_device).cloned();
@@ -554,12 +843,19 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
             .as_ref()
             .map(|e| e.device_path.clone())
             .unwrap_or_default();
+        let hdr_entry = hdr_map.get(&entry.gdi_device).copied().unwrap_or((false, false));
         let handle_int = raw_handle as isize;
 
         join_handles.push(thread::spawn(move || {
             let h = handle_int as HANDLE;
             let (brand, name, model_code) = parse_brand_and_model(edid.as_ref(), &desc, idx);
-            let full_resolution = match edid.as_ref().map(|e| e.refresh_hz).unwrap_or(0) {
+            let (cur_hz, avail_hz) = query_refresh_rates(&entry.gdi_device);
+            let effective_hz = if cur_hz > 0 {
+                cur_hz
+            } else {
+                edid.as_ref().map(|e| e.refresh_hz).unwrap_or(0)
+            };
+            let full_resolution = match effective_hz {
                 hz if hz > 0 => format!("{} | {}Hz", entry.resolution, hz),
                 _ => entry.resolution,
             };
@@ -602,6 +898,16 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
                 input_source,
                 is_internal_wmi: false,
                 wmi_instance: String::new(),
+                os_info: DisplayOsInfo {
+                    current_refresh_rate: effective_hz,
+                    available_refresh_rates: avail_hz,
+                    hdr_supported: hdr_entry.0,
+                    hdr_enabled: hdr_entry.1,
+                },
+                discovered_vcps: Vec::new(),
+                capabilities_raw: String::new(),
+                mccs_version: String::new(),
+                software_lut: SoftwareLutSettings::default(),
             };
 
             (
@@ -718,6 +1024,11 @@ mod tests {
                 } else {
                     String::new()
                 },
+                os_info: DisplayOsInfo::default(),
+                discovered_vcps: Vec::new(),
+                capabilities_raw: String::new(),
+                mccs_version: String::new(),
+                software_lut: SoftwareLutSettings::default(),
             },
             handle: PhysicalHandleWrap(std::ptr::null_mut()),
         }

@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ddc;
+mod monitor_profiles;
 mod settings;
 mod updater;
+mod win_display;
 mod wmi_brightness;
 
 slint::include_modules!();
@@ -10,6 +12,7 @@ slint::include_modules!();
 use ddc::{DdcEngine, MonitorInfo};
 use raw_window_handle::HasWindowHandle;
 use settings::AppSettings;
+use win_display::SoftwareLutSettings;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
 use std::env;
@@ -397,8 +400,9 @@ fn install_borderless_resize_subclass(hwnd: windows_sys::Win32::Foundation::HWND
     }
 
     unsafe {
-        let prev = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, resize_wnd_proc as isize);
-        if prev != 0 && prev != (resize_wnd_proc as isize) {
+        let wnd_proc_ptr = resize_wnd_proc as *const () as isize;
+        let prev = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc_ptr);
+        if prev != 0 && prev != wnd_proc_ptr {
             PREV_WNDPROC.store(prev, Ordering::Release);
             SUBCLASSED_HWND.store(hwnd_val, Ordering::Release);
         }
@@ -533,7 +537,41 @@ fn perform_uninstall() {
     }
 }
 
-fn to_ui_monitor(m: &MonitorInfo) -> UiMonitor {
+fn to_ui_monitor(m: &MonitorInfo, vcps_probing: bool) -> UiMonitor {
+    let available_hz_vec: Vec<i32> = m
+        .os_info
+        .available_refresh_rates
+        .iter()
+        .map(|&h| h as i32)
+        .collect();
+    let discovered_vec: Vec<UiDiscoveredVcp> = m
+        .discovered_vcps
+        .iter()
+        .map(|dv| {
+            let opts: Vec<UiVcpOption> = dv
+                .options
+                .iter()
+                .map(|o| UiVcpOption {
+                    value: o.value as i32,
+                    label: SharedString::from(o.label.as_str()),
+                })
+                .collect();
+            UiDiscoveredVcp {
+                code: dv.code as i32,
+                hex_code: SharedString::from(format!("0x{:02X}", dv.code)),
+                name_it: SharedString::from(dv.name_it.as_str()),
+                name_en: SharedString::from(dv.name_en.as_str()),
+                category: SharedString::from(dv.category.as_str()),
+                is_continuous: dv.is_continuous,
+                current: dv.current as i32,
+                max: dv.max.max(1) as i32,
+                is_read_only: dv.is_read_only,
+                is_critical: dv.is_critical,
+                options: ModelRc::from(Rc::new(VecModel::from(opts))),
+            }
+        })
+        .collect();
+
     UiMonitor {
         id: m.id as i32,
         name: SharedString::from(m.name.as_str()),
@@ -564,7 +602,49 @@ fn to_ui_monitor(m: &MonitorInfo) -> UiMonitor {
         volume_sup: m.volume.supported,
         input_source: m.input_source.current as i32,
         input_sup: m.input_source.supported,
+        current_hz: m.os_info.current_refresh_rate as i32,
+        available_hz: ModelRc::from(Rc::new(VecModel::from(available_hz_vec))),
+        hdr_supported: m.os_info.hdr_supported,
+        hdr_enabled: m.os_info.hdr_enabled,
+        mccs_version: SharedString::from(m.mccs_version.as_str()),
+        vcps_probing: vcps_probing && m.ddc_supported && !m.is_internal_wmi,
+        discovered_vcps: ModelRc::from(Rc::new(VecModel::from(discovered_vec))),
+        sw_lut_enabled: m.software_lut.enabled,
+        sw_gamma: m.software_lut.gamma_pct,
+        sw_warmth: m.software_lut.warmth,
+        sw_contrast: m.software_lut.contrast_pct,
+        sw_red: m.software_lut.red_pct,
+        sw_green: m.software_lut.green_pct,
+        sw_blue: m.software_lut.blue_pct,
     }
+}
+
+fn push_monitors_to_ui(ui: &AppWindow, list: &[MonitorInfo], vcps_probing: bool) {
+    let vec_ui: Vec<UiMonitor> = list.iter().map(|m| to_ui_monitor(m, vcps_probing)).collect();
+    ui.set_monitors(ModelRc::from(Rc::new(VecModel::from(vec_ui))));
+    ui.invoke_sync_current_values();
+}
+
+fn run_two_phase_scan(
+    ddc: &Arc<DdcEngine>,
+    order: &[String],
+    ui_weak: &slint::Weak<AppWindow>,
+) {
+    let list = ddc.scan_monitors_ordered(order);
+    let uw1 = ui_weak.clone();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(u) = uw1.upgrade() {
+            push_monitors_to_ui(&u, &list, true);
+        }
+    });
+
+    let probed = ddc.probe_capabilities_for_all();
+    let uw2 = ui_weak.clone();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(u) = uw2.upgrade() {
+            push_monitors_to_ui(&u, &probed, false);
+        }
+    });
 }
 
 fn drop_tray_icon() {
@@ -722,13 +802,12 @@ fn main() {
             let s_c = Arc::clone(&settings_menu);
             thread::spawn(move || {
                 let order = s_c.lock().unwrap().monitor_order.clone();
-                let list = ddc_c.scan_monitors_ordered(&order);
+                let uw_show = uw.clone();
+                let s_show = Arc::clone(&s_c);
+                run_two_phase_scan(&ddc_c, &order, &uw);
                 let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(u) = uw.upgrade() {
-                        let vec_ui: Vec<UiMonitor> = list.iter().map(to_ui_monitor).collect();
-                        u.set_monitors(ModelRc::from(Rc::new(VecModel::from(vec_ui))));
-                        u.invoke_sync_current_values();
-                        let acrylic = s_c.lock().unwrap().acrylic_transparency;
+                    if let Some(u) = uw_show.upgrade() {
+                        let acrylic = s_show.lock().unwrap().acrylic_transparency;
                         show_and_focus_window(&u, acrylic);
                     }
                 });
@@ -879,6 +958,15 @@ fn main() {
                             96 => row.input_source = value,
                             _ => {}
                         }
+                        for j in 0..row.discovered_vcps.row_count() {
+                            if let Some(mut dv) = row.discovered_vcps.row_data(j) {
+                                if dv.code == vcp_code {
+                                    dv.current = value;
+                                    row.discovered_vcps.set_row_data(j, dv);
+                                    break;
+                                }
+                            }
+                        }
                         monitors_rc.set_row_data(i, row);
 
                         if u.get_selected_monitor_index() == i as i32 {
@@ -975,7 +1063,7 @@ fn main() {
         }
     });
 
-    // Callback: Rescan Monitor
+    // Callback: Rescan Monitor (2-phase: veloce + capabilities)
     let ddc_rescan = Arc::clone(&ddc_engine);
     let settings_rescan = Arc::clone(&settings_state);
     let ui_weak_rescan = ui.as_weak();
@@ -985,15 +1073,113 @@ fn main() {
         let uw = ui_weak_rescan.clone();
         thread::spawn(move || {
             let order = s_c.lock().unwrap().monitor_order.clone();
-            let list = ddc_c.scan_monitors_ordered(&order);
+            run_two_phase_scan(&ddc_c, &order, &uw);
+        });
+    });
+
+    // Callback: Riscansiona Capabilities MCCS / Brand VCP
+    let ddc_caps = Arc::clone(&ddc_engine);
+    let ui_weak_caps = ui.as_weak();
+    ui.on_rescan_capabilities(move |_monitor_id| {
+        let ddc_c = Arc::clone(&ddc_caps);
+        let uw = ui_weak_caps.clone();
+        if let Some(u) = uw.upgrade() {
+            let monitors_rc = u.get_monitors();
+            for i in 0..monitors_rc.row_count() {
+                if let Some(mut row) = monitors_rc.row_data(i) {
+                    if row.ddc_supported && !row.is_internal_wmi {
+                        row.vcps_probing = true;
+                        monitors_rc.set_row_data(i, row);
+                    }
+                }
+            }
+        }
+        thread::spawn(move || {
+            let probed = ddc_c.probe_capabilities_for_all();
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(u) = uw.upgrade() {
-                    let vec_ui: Vec<UiMonitor> = list.iter().map(to_ui_monitor).collect();
-                    u.set_monitors(ModelRc::from(Rc::new(VecModel::from(vec_ui))));
-                    u.invoke_sync_current_values();
+                    push_monitors_to_ui(&u, &probed, false);
                 }
             });
         });
+    });
+
+    // Callback: Frequenza di Aggiornamento Display Windows (Hz)
+    let ddc_hz = Arc::clone(&ddc_engine);
+    let ui_weak_hz = ui.as_weak();
+    ui.on_set_refresh_rate(move |monitor_id, hz| {
+        let ddc_c = Arc::clone(&ddc_hz);
+        let uw = ui_weak_hz.clone();
+        thread::spawn(move || {
+            if let Ok(updated) = ddc_c.set_monitor_refresh_rate(monitor_id as usize, hz as u32) {
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(u) = uw.upgrade() {
+                        push_monitors_to_ui(&u, &updated, false);
+                    }
+                });
+            }
+        });
+    });
+
+    // Callback: Toggle HDR Nativo Windows
+    let ddc_hdr = Arc::clone(&ddc_engine);
+    let ui_weak_hdr = ui.as_weak();
+    ui.on_set_hdr_enabled(move |monitor_id, enabled| {
+        let ddc_c = Arc::clone(&ddc_hdr);
+        let uw = ui_weak_hdr.clone();
+        thread::spawn(move || {
+            if let Ok(updated) = ddc_c.set_monitor_hdr(monitor_id as usize, enabled) {
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(u) = uw.upgrade() {
+                        push_monitors_to_ui(&u, &updated, false);
+                    }
+                });
+            }
+        });
+    });
+
+    // Callback: Calibrazione Software GDI LUT (Gamma, Warmth/Luce Blu, Contrasto, RGB)
+    let ddc_lut = Arc::clone(&ddc_engine);
+    let ui_weak_lut = ui.as_weak();
+    ui.on_set_software_lut(move |monitor_id, enabled, gamma, warmth, contrast, r, g, b| {
+        let cfg = SoftwareLutSettings {
+            enabled,
+            gamma_pct: gamma.clamp(50, 200),
+            warmth: warmth.clamp(0, 100),
+            contrast_pct: contrast.clamp(50, 150),
+            red_pct: r.clamp(50, 150),
+            green_pct: g.clamp(50, 150),
+            blue_pct: b.clamp(50, 150),
+        };
+        ddc_lut.update_software_lut(monitor_id as usize, cfg.clone());
+        if let Some(u) = ui_weak_lut.upgrade() {
+            let monitors_rc = u.get_monitors();
+            for i in 0..monitors_rc.row_count() {
+                if let Some(mut row) = monitors_rc.row_data(i) {
+                    if row.id == monitor_id {
+                        row.sw_lut_enabled = cfg.enabled;
+                        row.sw_gamma = cfg.gamma_pct;
+                        row.sw_warmth = cfg.warmth;
+                        row.sw_contrast = cfg.contrast_pct;
+                        row.sw_red = cfg.red_pct;
+                        row.sw_green = cfg.green_pct;
+                        row.sw_blue = cfg.blue_pct;
+                        monitors_rc.set_row_data(i, row);
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    // Callback: Ripristina Calibrazione Software LUT
+    let ddc_lut_rst = Arc::clone(&ddc_engine);
+    let ui_weak_lut_rst = ui.as_weak();
+    ui.on_reset_software_lut(move |monitor_id| {
+        let updated = ddc_lut_rst.reset_monitor_software_lut(monitor_id as usize);
+        if let Some(u) = ui_weak_lut_rst.upgrade() {
+            push_monitors_to_ui(&u, &updated, false);
+        }
     });
 
     // Callback: Riordina Monitor da from_idx a to_idx con aggiornamento in-place dopo lo snap animato
@@ -1158,7 +1344,6 @@ fn main() {
     let chk_busy_inst = Arc::clone(&update_checking);
     let cancel_flag_inst = Arc::clone(&update_cancel_flag);
     let restart_store_inst = Arc::clone(&restart_after_exit);
-    let sd_upd = Arc::clone(&shutting_down);
     ui.on_install_update(move || {
         if dl_busy_inst.load(Ordering::SeqCst) || chk_busy_inst.load(Ordering::SeqCst) {
             return;
@@ -1174,16 +1359,17 @@ fn main() {
                     let ver = u.get_latest_version().to_string();
                     u.set_update_downloading(true);
                     u.set_update_installing(false);
+                    u.set_update_ready_to_restart(false);
                     u.set_update_failed(false);
                     u.set_update_progress(0.0);
                     u.set_update_indeterminate(expected_size == 0);
                     u.set_update_progress_phase(SharedString::from(if en {
-                        format!("Downloading v{}...", ver)
+                        format!("Phase 2/3 · Downloading v{}...", ver)
                     } else {
-                        format!("Download v{}...", ver)
+                        format!("Fase 2/3 · Download v{}...", ver)
                     }));
                     u.set_update_progress_detail(SharedString::from(
-                        updater::format_progress_detail(0, expected_size),
+                        updater::format_progress_detail(0, expected_size, 0.0),
                     ));
                     u.set_update_status_text(SharedString::from(if en {
                         format!("Downloading Monitor Manager v{}...", ver)
@@ -1199,18 +1385,19 @@ fn main() {
                 let dl_busy_done = Arc::clone(&dl_busy_inst);
                 let cancel_flag_bg = Arc::clone(&cancel_flag_inst);
                 let restart_bg = Arc::clone(&restart_store_inst);
-                let sd_bg = Arc::clone(&sd_upd);
 
                 thread::spawn(move || {
                     let uw_prog = uw.clone();
                     let ver_prog = target_ver.clone();
+                    let ver_cb = ver_prog.clone();
                     let result = updater::perform_self_update_with_progress(
                         &url,
+                        &ver_prog,
                         expected_size,
                         &cancel_flag_bg,
                         move |prog| {
                             let uw_ui = uw_prog.clone();
-                            let ver_str = ver_prog.clone();
+                            let ver_str = ver_cb.clone();
                             let _ = slint::invoke_from_event_loop(move || {
                                 if let Some(u) = uw_ui.upgrade() {
                                     let en = u.get_lang() == "en";
@@ -1222,15 +1409,16 @@ fn main() {
                                             u.set_update_progress(prog.fraction);
                                             u.set_update_progress_phase(SharedString::from(
                                                 if en {
-                                                    format!("Downloading v{}...", ver_str)
+                                                    format!("Phase 2/3 · Downloading v{}...", ver_str)
                                                 } else {
-                                                    format!("Download v{}...", ver_str)
+                                                    format!("Fase 2/3 · Download v{}...", ver_str)
                                                 },
                                             ));
                                             u.set_update_progress_detail(SharedString::from(
                                                 updater::format_progress_detail(
                                                     prog.downloaded_bytes,
                                                     prog.total_bytes,
+                                                    prog.speed_bps,
                                                 ),
                                             ));
                                         }
@@ -1241,21 +1429,22 @@ fn main() {
                                             u.set_update_progress(1.0);
                                             u.set_update_progress_phase(SharedString::from(
                                                 if en {
-                                                    "Launching installer...".to_string()
+                                                    "Phase 3/3 · Preparing update...".to_string()
                                                 } else {
-                                                    "Installazione in corso...".to_string()
+                                                    "Fase 3/3 · Preparazione aggiornamento...".to_string()
                                                 },
                                             ));
                                             u.set_update_progress_detail(SharedString::from(
                                                 updater::format_progress_detail(
                                                     prog.downloaded_bytes,
                                                     prog.total_bytes,
+                                                    0.0,
                                                 ),
                                             ));
                                             u.set_update_status_text(SharedString::from(if en {
-                                                format!("Installing v{}...", ver_str)
+                                                format!("Staging v{}...", ver_str)
                                             } else {
-                                                format!("Installazione v{} in corso...", ver_str)
+                                                format!("Preparazione v{} in corso...", ver_str)
                                             }));
                                         }
                                     }
@@ -1267,10 +1456,29 @@ fn main() {
                     match result {
                         Ok(target_exe) => {
                             *restart_bg.lock().unwrap() = Some(target_exe);
-                            sd_bg.store(true, Ordering::SeqCst);
+                            dl_busy_done.store(false, Ordering::SeqCst);
+                            let uw_done = uw.clone();
+                            let ver_done = target_ver.clone();
                             let _ = slint::invoke_from_event_loop(move || {
-                                drop_tray_icon();
-                                let _ = slint::quit_event_loop();
+                                if let Some(u) = uw_done.upgrade() {
+                                    let en = u.get_lang() == "en";
+                                    u.set_update_downloading(false);
+                                    u.set_update_installing(false);
+                                    u.set_update_ready_to_restart(true);
+                                    u.set_update_indeterminate(false);
+                                    u.set_update_progress(1.0);
+                                    u.set_update_progress_phase(SharedString::from(if en {
+                                        "Phase 3/3 · Ready to restart"
+                                    } else {
+                                        "Fase 3/3 · Pronto al riavvio"
+                                    }));
+                                    u.set_update_status_text(SharedString::from(if en {
+                                        format!("v{} downloaded and staged. Click Restart Now to apply.", ver_done)
+                                    } else {
+                                        format!("v{} scaricata e pronta. Premi Riavvia Ora per applicare.", ver_done)
+                                    }));
+                                    u.set_show_update_modal(true);
+                                }
                             });
                         }
                         Err(err) => {
@@ -1315,6 +1523,14 @@ fn main() {
         }
     });
 
+    // Callback: Riavvia App per applicare aggiornamento già scaricato
+    let sd_restart_btn = Arc::clone(&shutting_down);
+    ui.on_restart_for_update(move || {
+        sd_restart_btn.store(true, Ordering::SeqCst);
+        drop_tray_icon();
+        let _ = slint::quit_event_loop();
+    });
+
     // Callback: Quit App
     let sd_quit_btn = Arc::clone(&shutting_down);
     ui.on_quit_app(move || {
@@ -1323,7 +1539,7 @@ fn main() {
         let _ = slint::quit_event_loop();
     });
 
-    // Scansione iniziale monitor e controllo aggiornamenti in background
+    // Scansione iniziale monitor (2 fasi) e controllo aggiornamenti in background
     {
         let ddc_init = Arc::clone(&ddc_engine);
         let uw_init = ui.as_weak();
@@ -1332,15 +1548,7 @@ fn main() {
         let dl_init = Arc::clone(&latest_download_url);
 
         thread::spawn(move || {
-            let list = ddc_init.scan_monitors_ordered(&order);
-            let uw_scan = uw_init.clone();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(u) = uw_scan.upgrade() {
-                    let vec_ui: Vec<UiMonitor> = list.iter().map(to_ui_monitor).collect();
-                    u.set_monitors(ModelRc::from(Rc::new(VecModel::from(vec_ui))));
-                    u.invoke_sync_current_values();
-                }
-            });
+            run_two_phase_scan(&ddc_init, &order, &uw_init);
 
             if auto_upd {
                 let res = updater::check_for_updates();

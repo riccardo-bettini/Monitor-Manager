@@ -1,5 +1,24 @@
 import { ScrollView } from "std-widgets.slint";
 
+export struct UiVcpOption {
+    value: int,
+    label: string,
+}
+
+export struct UiDiscoveredVcp {
+    code: int,
+    hex-code: string,
+    name-it: string,
+    name-en: string,
+    category: string,
+    is-continuous: bool,
+    current: int,
+    max: int,
+    is-read-only: bool,
+    is-critical: bool,
+    options: [UiVcpOption],
+}
+
 export struct UiMonitor {
     id: int,
     name: string,
@@ -30,6 +49,20 @@ export struct UiMonitor {
     volume-sup: bool,
     input-source: int,
     input-sup: bool,
+    current-hz: int,
+    available-hz: [int],
+    hdr-supported: bool,
+    hdr-enabled: bool,
+    mccs-version: string,
+    vcps-probing: bool,
+    discovered-vcps: [UiDiscoveredVcp],
+    sw-lut-enabled: bool,
+    sw-gamma: int,
+    sw-warmth: int,
+    sw-contrast: int,
+    sw-red: int,
+    sw-green: int,
+    sw-blue: int,
 }
 
 // ============================================================================
@@ -1180,11 +1213,27 @@ export component AppWindow inherits Window {
             volume-sup: true,
             input-source: 15,
             input-sup: true,
+            current-hz: 165,
+            available-hz: [60, 120, 144, 165],
+            hdr-supported: true,
+            hdr-enabled: false,
+            mccs-version: "2.2",
+            vcps-probing: false,
+            discovered-vcps: [],
+            sw-lut-enabled: false,
+            sw-gamma: 100,
+            sw-warmth: 0,
+            sw-contrast: 100,
+            sw-red: 100,
+            sw-green: 100,
+            sw-blue: 100,
         }
     ];
     in-out property <int> selected-monitor-index: 0;
     // "home" | "dashboard" | "profiles" | "reorder" | "settings"
     in-out property <string> active-view: "home";
+    // "all" | "gaming" | "image" | "color" | "audio_input" | "system" | "raw"
+    in-out property <string> dashboard-vcp-tab: "all";
 
     // Proprietà reattive dirette per slider ultra-reattivi (zero delay, zero freeze)
     in-out property <int> current-brightness: 75;
@@ -1235,28 +1284,44 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.14";
-    in-out property <string> update-status-text: "Monitor Manager v1.14 (Frosted Acrylic, WMI Laptop & Native Vector UI)";
+    in-out property <string> app-version: "1.15";
+    in-out property <string> update-status-text: "Monitor Manager v1.15 (MCCS Engine, Brand Profiles & DisplayConfig)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.14";
+    in-out property <string> latest-version: "1.15";
     in-out property <bool> update-checking: false;
     in-out property <bool> update-downloading: false;
     in-out property <bool> update-installing: false;
+    in-out property <bool> update-ready-to-restart: false;
     in-out property <bool> update-failed: false;
     in-out property <float> update-progress: 0.0;
     in-out property <bool> update-indeterminate: false;
     in-out property <string> update-progress-phase: "";
     in-out property <string> update-progress-detail: "";
+    in-out property <bool> show-update-modal: false;
+
+    // Stato modale di conferma per VCP critici (Reset Fabbrica / Spegnimento DPMS)
+    in-out property <bool> confirm-vcp-open: false;
+    in-out property <int> confirm-vcp-monitor-id: 0;
+    in-out property <int> confirm-vcp-code: 0;
+    in-out property <int> confirm-vcp-value: 0;
+    in-out property <string> confirm-vcp-title: "";
+    in-out property <string> confirm-vcp-desc: "";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
     callback apply-preset(int /* monitor_id */, int /* lum */, int /* con */);
     callback reset-rgb(int /* monitor_id */);
     callback rescan-monitors();
+    callback rescan-capabilities(int /* monitor_id */);
+    callback set-refresh-rate(int /* monitor_id */, int /* hz */);
+    callback set-hdr-enabled(int /* monitor_id */, bool /* enabled */);
+    callback set-software-lut(int /* monitor_id */, bool /* enabled */, int /* gamma */, int /* warmth */, int /* contrast */, int /* r */, int /* g */, int /* b */);
+    callback reset-software-lut(int /* monitor_id */);
     callback save-settings();
     callback check-updates();
     callback install-update();
     callback cancel-update();
+    callback restart-for-update();
     callback quit-app();
     callback minimize-window();
     callback toggle-maximize-window();
@@ -1295,6 +1360,11 @@ export component AppWindow inherits Window {
             color-temp: 5, color-temp-sup: true,
             volume: 50, volume-sup: true,
             input-source: 15, input-sup: true,
+            current-hz: 60, available-hz: [],
+            hdr-supported: false, hdr-enabled: false,
+            mccs-version: "", vcps-probing: false, discovered-vcps: [],
+            sw-lut-enabled: false, sw-gamma: 100, sw-warmth: 0, sw-contrast: 100,
+            sw-red: 100, sw-green: 100, sw-blue: 100,
         };
 
     property <string> active-input-label:
@@ -1816,25 +1886,29 @@ export component AppWindow inherits Window {
 
                                 HorizontalLayout {
                                     alignment: start;
-                                    if root.update-available || root.update-downloading || root.update-installing : Rectangle {
+                                    if root.update-available || root.update-downloading || root.update-installing || root.update-ready-to-restart : Rectangle {
                                         height: 22px;
                                         y: (parent.height - self.height) / 2;
                                         border-radius: 5px;
                                         clip: true;
-                                        background: root.accent-main.with-alpha(root.update-downloading || root.update-installing ? 0.28 : 0.22);
+                                        background: root.update-ready-to-restart
+                                            ? #39d35333
+                                            : root.accent-main.with-alpha(root.update-downloading || root.update-installing ? 0.28 : 0.22);
                                         border-width: 1px;
-                                        border-color: root.accent-main;
+                                        border-color: root.update-ready-to-restart ? #39d353 : root.accent-main;
                                         HorizontalLayout {
                                             padding-left: 8px;
                                             padding-right: 8px;
                                             Text {
-                                                text: root.update-installing
-                                                    ? (root.is-en ? "Installing v\{root.latest-version}..." : "Installazione v\{root.latest-version}...")
-                                                    : (root.update-downloading
-                                                        ? (root.update-indeterminate
-                                                            ? (root.is-en ? "Downloading v\{root.latest-version}..." : "Download v\{root.latest-version}...")
-                                                            : (root.is-en ? "Downloading v\{root.latest-version} · \{Math.round(root.update-progress * 100)}%" : "Download v\{root.latest-version} · \{Math.round(root.update-progress * 100)}%"))
-                                                        : (root.is-en ? "Update v\{root.latest-version} ready" : "Aggiornamento v\{root.latest-version} pronto"));
+                                                text: root.update-ready-to-restart
+                                                    ? (root.is-en ? "v\{root.latest-version} ready · Restart" : "v\{root.latest-version} pronto · Riavvia")
+                                                    : (root.update-installing
+                                                        ? (root.is-en ? "Installing v\{root.latest-version}..." : "Installazione v\{root.latest-version}...")
+                                                        : (root.update-downloading
+                                                            ? (root.update-indeterminate
+                                                                ? (root.is-en ? "Downloading v\{root.latest-version}..." : "Download v\{root.latest-version}...")
+                                                                : (root.is-en ? "Downloading v\{root.latest-version} · \{Math.round(root.update-progress * 100)}%" : "Download v\{root.latest-version} · \{Math.round(root.update-progress * 100)}%"))
+                                                            : (root.is-en ? "Update v\{root.latest-version} available" : "Aggiornamento v\{root.latest-version} pronto")));
                                                 color: #ffffff;
                                                 font-size: 11px;
                                                 font-weight: 600;
@@ -1858,13 +1932,7 @@ export component AppWindow inherits Window {
                                         }
                                         TouchArea {
                                             mouse-cursor: pointer;
-                                            clicked => {
-                                                if root.update-downloading || root.update-installing {
-                                                    root.active-view = "settings";
-                                                } else {
-                                                    root.install-update();
-                                                }
-                                            }
+                                            clicked => { root.show-update-modal = true; }
                                         }
                                     }
                                 }
@@ -2455,6 +2523,591 @@ export component AppWindow inherits Window {
                                                 font-weight: 600;
                                                 horizontal-alignment: right;
                                                 vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 4. CARD CONTROLLI WINDOWS NATIVI & CALIBRAZIONE SOFTWARE (PORTATILI + ESTERNI)
+                                Rectangle {
+                                    border-radius: 12px;
+                                    background: #21252e;
+                                    border-width: 1px;
+                                    border-color: #2d323e;
+
+                                    VerticalLayout {
+                                        padding: root.is-compact ? 14px : 18px;
+                                        spacing: 12px;
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            VerticalLayout {
+                                                spacing: 2px;
+                                                Text {
+                                                    text: root.is-en
+                                                        ? "Windows Display & Software LUT Calibration"
+                                                        : "Display Windows & Calibrazione Software (LUT)";
+                                                    color: #e9edf5;
+                                                    font-size: 14px;
+                                                    font-weight: 600;
+                                                }
+                                                Text {
+                                                    text: root.is-en
+                                                        ? "Native Refresh Rate, Windows HDR and per-display GDI gamma calibration (laptops & external screens)"
+                                                        : "Refresh Rate nativo, HDR Windows e calibrazione colore GDI per schermo (anche su portatili senza DDC)";
+                                                    color: #9da5b4;
+                                                    font-size: 11px;
+                                                }
+                                            }
+
+                                            TitaniumChip {
+                                                text: root.is-en ? "Reset LUT" : "Ripristina Calibrazione";
+                                                subtle-danger: root.current-monitor.sw-lut-enabled;
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.reset-software-lut(root.current-monitor.id); }
+                                            }
+                                        }
+
+                                        // Riga Frequenza di Aggiornamento (Hz)
+                                        if root.current-monitor.available-hz.length > 0 : HorizontalLayout {
+                                            spacing: 10px;
+                                            alignment: space-between;
+
+                                            Text {
+                                                text: root.is-en ? "Refresh Rate:" : "Frequenza (Hz):";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                font-weight: 500;
+                                                vertical-alignment: center;
+                                            }
+
+                                            HorizontalLayout {
+                                                spacing: 6px;
+                                                for hz in root.current-monitor.available-hz : TitaniumChip {
+                                                    text: "\{hz} Hz";
+                                                    active: root.current-monitor.current-hz == hz;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-refresh-rate(root.current-monitor.id, hz); }
+                                                }
+                                            }
+                                        }
+
+                                        // Riga Toggle Windows HDR (quando supportato dal display)
+                                        if root.current-monitor.hdr-supported : HorizontalLayout {
+                                            alignment: space-between;
+                                            Text {
+                                                text: root.is-en ? "Windows HDR Mode" : "Modalita HDR Windows";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                font-weight: 500;
+                                                vertical-alignment: center;
+                                            }
+                                            TitaniumToggle {
+                                                checked: root.current-monitor.hdr-enabled;
+                                                accent: root.accent-main;
+                                                toggled(val) => { root.set-hdr-enabled(root.current-monitor.id, val); }
+                                            }
+                                        }
+
+                                        Rectangle { height: 1px; background: #2c313e; }
+
+                                        // Riga Attiva Calibrazione Software LUT
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            VerticalLayout {
+                                                spacing: 1px;
+                                                Text {
+                                                    text: root.is-en ? "Enable Software Color & Gamma LUT" : "Attiva Calibrazione Software Gamma & Colore";
+                                                    color: #e9edf5;
+                                                    font-size: 13px;
+                                                    font-weight: 500;
+                                                }
+                                                Text {
+                                                    text: root.is-en
+                                                        ? "Auto-activates when adjusting sliders below"
+                                                        : "Si attiva automaticamente muovendo gli slider qui sotto";
+                                                    color: #8b93a4;
+                                                    font-size: 11px;
+                                                }
+                                            }
+                                            TitaniumToggle {
+                                                checked: root.current-monitor.sw-lut-enabled;
+                                                accent: root.accent-main;
+                                                toggled(val) => {
+                                                    root.set-software-lut(
+                                                        root.current-monitor.id,
+                                                        val,
+                                                        root.current-monitor.sw-gamma,
+                                                        root.current-monitor.sw-warmth,
+                                                        root.current-monitor.sw-contrast,
+                                                        root.current-monitor.sw-red,
+                                                        root.current-monitor.sw-green,
+                                                        root.current-monitor.sw-blue
+                                                    );
+                                                }
+                                            }
+                                        }
+
+                                        // Slider Software Gamma (50..200)
+                                        HorizontalLayout {
+                                            spacing: 12px;
+                                            Text {
+                                                width: 115px;
+                                                text: root.is-en ? "Gamma (SW)" : "Gamma (SW)";
+                                                color: #c5cbd6;
+                                                font-size: 12.5px;
+                                                vertical-alignment: center;
+                                            }
+                                            NeonSlider {
+                                                horizontal-stretch: 1;
+                                                value: root.current-monitor.sw-gamma;
+                                                minimum: 50;
+                                                maximum: 200;
+                                                track-color: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                changed(v) => {
+                                                    root.set-software-lut(
+                                                        root.current-monitor.id, true, v,
+                                                        root.current-monitor.sw-warmth,
+                                                        root.current-monitor.sw-contrast,
+                                                        root.current-monitor.sw-red,
+                                                        root.current-monitor.sw-green,
+                                                        root.current-monitor.sw-blue
+                                                    );
+                                                }
+                                            }
+                                            Text {
+                                                width: 48px;
+                                                text: "\{Math.round(root.current-monitor.sw-gamma)}%";
+                                                color: #9da5b4;
+                                                font-size: 12px;
+                                                font-weight: 600;
+                                                horizontal-alignment: right;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        // Slider Luce Blu / Calore Software (0..100)
+                                        HorizontalLayout {
+                                            spacing: 12px;
+                                            Text {
+                                                width: 115px;
+                                                text: root.is-en ? "Blue Light Filter" : "Filtro Luce Blu";
+                                                color: #c5cbd6;
+                                                font-size: 12.5px;
+                                                vertical-alignment: center;
+                                            }
+                                            NeonSlider {
+                                                horizontal-stretch: 1;
+                                                value: root.current-monitor.sw-warmth;
+                                                minimum: 0;
+                                                maximum: 100;
+                                                track-color: #ff9f43;
+                                                glow-style: root.glow-style;
+                                                changed(v) => {
+                                                    root.set-software-lut(
+                                                        root.current-monitor.id, true,
+                                                        root.current-monitor.sw-gamma, v,
+                                                        root.current-monitor.sw-contrast,
+                                                        root.current-monitor.sw-red,
+                                                        root.current-monitor.sw-green,
+                                                        root.current-monitor.sw-blue
+                                                    );
+                                                }
+                                            }
+                                            Text {
+                                                width: 48px;
+                                                text: "\{root.current-monitor.sw-warmth}%";
+                                                color: #9da5b4;
+                                                font-size: 12px;
+                                                font-weight: 600;
+                                                horizontal-alignment: right;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        // Slider Contrasto Software (50..150)
+                                        HorizontalLayout {
+                                            spacing: 12px;
+                                            Text {
+                                                width: 115px;
+                                                text: root.is-en ? "Contrast (SW)" : "Contrasto (SW)";
+                                                color: #c5cbd6;
+                                                font-size: 12.5px;
+                                                vertical-alignment: center;
+                                            }
+                                            NeonSlider {
+                                                horizontal-stretch: 1;
+                                                value: root.current-monitor.sw-contrast;
+                                                minimum: 50;
+                                                maximum: 150;
+                                                track-color: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                changed(v) => {
+                                                    root.set-software-lut(
+                                                        root.current-monitor.id, true,
+                                                        root.current-monitor.sw-gamma,
+                                                        root.current-monitor.sw-warmth, v,
+                                                        root.current-monitor.sw-red,
+                                                        root.current-monitor.sw-green,
+                                                        root.current-monitor.sw-blue
+                                                    );
+                                                }
+                                            }
+                                            Text {
+                                                width: 48px;
+                                                text: "\{root.current-monitor.sw-contrast}%";
+                                                color: #9da5b4;
+                                                font-size: 12px;
+                                                font-weight: 600;
+                                                horizontal-alignment: right;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        // Slider RGB Gain Software compatti (50..150)
+                                        HorizontalLayout {
+                                            spacing: 12px;
+                                            Text {
+                                                width: 115px;
+                                                text: "RGB Gain (SW)";
+                                                color: #c5cbd6;
+                                                font-size: 12.5px;
+                                                vertical-alignment: center;
+                                            }
+                                            NeonSlider {
+                                                horizontal-stretch: 1;
+                                                value: root.current-monitor.sw-red;
+                                                minimum: 50;
+                                                maximum: 150;
+                                                track-color: #ea5a47;
+                                                glow-style: root.glow-style;
+                                                changed(v) => {
+                                                    root.set-software-lut(
+                                                        root.current-monitor.id, true,
+                                                        root.current-monitor.sw-gamma,
+                                                        root.current-monitor.sw-warmth,
+                                                        root.current-monitor.sw-contrast,
+                                                        v, root.current-monitor.sw-green, root.current-monitor.sw-blue
+                                                    );
+                                                }
+                                            }
+                                            NeonSlider {
+                                                horizontal-stretch: 1;
+                                                value: root.current-monitor.sw-green;
+                                                minimum: 50;
+                                                maximum: 150;
+                                                track-color: #46b966;
+                                                glow-style: root.glow-style;
+                                                changed(v) => {
+                                                    root.set-software-lut(
+                                                        root.current-monitor.id, true,
+                                                        root.current-monitor.sw-gamma,
+                                                        root.current-monitor.sw-warmth,
+                                                        root.current-monitor.sw-contrast,
+                                                        root.current-monitor.sw-red, v, root.current-monitor.sw-blue
+                                                    );
+                                                }
+                                            }
+                                            NeonSlider {
+                                                horizontal-stretch: 1;
+                                                value: root.current-monitor.sw-blue;
+                                                minimum: 50;
+                                                maximum: 150;
+                                                track-color: #4a7ee5;
+                                                glow-style: root.glow-style;
+                                                changed(v) => {
+                                                    root.set-software-lut(
+                                                        root.current-monitor.id, true,
+                                                        root.current-monitor.sw-gamma,
+                                                        root.current-monitor.sw-warmth,
+                                                        root.current-monitor.sw-contrast,
+                                                        root.current-monitor.sw-red, root.current-monitor.sw-green, v
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 5. CARD PARAMETRI HARDWARE RILEVATI DINAMICAMENTE (MCCS / ASUS TUF / AOC / PHILIPS / KTC)
+                                Rectangle {
+                                    border-radius: 12px;
+                                    background: #21252e;
+                                    border-width: 1px;
+                                    border-color: #2d323e;
+
+                                    VerticalLayout {
+                                        padding: root.is-compact ? 14px : 18px;
+                                        spacing: 12px;
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            VerticalLayout {
+                                                spacing: 2px;
+                                                HorizontalLayout {
+                                                    spacing: 8px;
+                                                    Text {
+                                                        text: root.is-en
+                                                            ? "Detected Monitor Capabilities (\{root.current-monitor.discovered-vcps.length} VCPs)"
+                                                            : "Parametri Hardware Rilevati (\{root.current-monitor.discovered-vcps.length} VCP)";
+                                                        color: #e9edf5;
+                                                        font-size: 14px;
+                                                        font-weight: 600;
+                                                        vertical-alignment: center;
+                                                    }
+                                                    if root.current-monitor.brand != "" && root.current-monitor.brand != "Generic" : Rectangle {
+                                                        height: 20px;
+                                                        border-radius: 4px;
+                                                        background: root.accent-soft;
+                                                        border-width: 1px;
+                                                        border-color: root.accent-main.with-alpha(0.6);
+                                                        HorizontalLayout {
+                                                            padding-left: 7px;
+                                                            padding-right: 7px;
+                                                            Text {
+                                                                text: root.current-monitor.brand;
+                                                                color: #ffffff;
+                                                                font-size: 10.5px;
+                                                                font-weight: 700;
+                                                                vertical-alignment: center;
+                                                            }
+                                                        }
+                                                    }
+                                                    if root.current-monitor.mccs-version != "" : Rectangle {
+                                                        height: 20px;
+                                                        border-radius: 4px;
+                                                        background: #2a303d;
+                                                        HorizontalLayout {
+                                                            padding-left: 7px;
+                                                            padding-right: 7px;
+                                                            Text {
+                                                                text: "MCCS \{root.current-monitor.mccs-version}";
+                                                                color: #c5cbd6;
+                                                                font-size: 10.5px;
+                                                                font-weight: 600;
+                                                                vertical-alignment: center;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                Text {
+                                                    text: root.current-monitor.vcps-probing
+                                                        ? (root.is-en ? "Scanning MCCS capabilities & brand VCP registers in background..." : "Scansione MCCS capabilities e registri VCP specifici del brand in corso...")
+                                                        : (root.current-monitor.ddc-supported
+                                                            ? (root.is-en ? "Auto-discovered from monitor firmware & brand tables" : "Rilevati automaticamente dal firmware dello schermo e profili brand")
+                                                            : (root.is-en ? "Internal display without DDC/CI hardware bus — use Windows Display & Software LUT above" : "Schermo interno senza bus hardware DDC/CI — usa Display Windows & LUT Software sopra"));
+                                                    color: #9da5b4;
+                                                    font-size: 11px;
+                                                }
+                                            }
+
+                                            TitaniumChip {
+                                                text: root.current-monitor.vcps-probing
+                                                    ? (root.is-en ? "Scanning..." : "Scansione...")
+                                                    : (root.is-en ? "Rescan VCP" : "Riscansiona VCP");
+                                                enabled: !root.current-monitor.vcps-probing && root.current-monitor.ddc-supported;
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.rescan-capabilities(root.current-monitor.id); }
+                                            }
+                                        }
+
+                                        // Barra Categorie VCP
+                                        if root.current-monitor.discovered-vcps.length > 0 : HorizontalLayout {
+                                            spacing: 6px;
+                                            TitaniumChip {
+                                                text: root.is-en ? "All" : "Tutti";
+                                                active: root.dashboard-vcp-tab == "all";
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.dashboard-vcp-tab = "all"; }
+                                            }
+                                            TitaniumChip {
+                                                text: "Gaming & Brand";
+                                                active: root.dashboard-vcp-tab == "gaming";
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.dashboard-vcp-tab = "gaming"; }
+                                            }
+                                            TitaniumChip {
+                                                text: root.is-en ? "Picture" : "Immagine";
+                                                active: root.dashboard-vcp-tab == "image";
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.dashboard-vcp-tab = "image"; }
+                                            }
+                                            TitaniumChip {
+                                                text: root.is-en ? "Color" : "Colore";
+                                                active: root.dashboard-vcp-tab == "color";
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.dashboard-vcp-tab = "color"; }
+                                            }
+                                            TitaniumChip {
+                                                text: "Audio & Input";
+                                                active: root.dashboard-vcp-tab == "audio_input";
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.dashboard-vcp-tab = "audio_input"; }
+                                            }
+                                            TitaniumChip {
+                                                text: root.is-en ? "System" : "Sistema";
+                                                active: root.dashboard-vcp-tab == "system";
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.dashboard-vcp-tab = "system"; }
+                                            }
+                                            TitaniumChip {
+                                                text: "Raw VCP";
+                                                active: root.dashboard-vcp-tab == "raw";
+                                                accent: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                clicked => { root.dashboard-vcp-tab = "raw"; }
+                                            }
+                                        }
+
+                                        // Lista dinamica dei VCP scoperti filtrata per categoria
+                                        if root.current-monitor.discovered-vcps.length > 0 : VerticalLayout {
+                                            spacing: 8px;
+
+                                            for vcp in root.current-monitor.discovered-vcps : Rectangle {
+                                                visible: root.dashboard-vcp-tab == "all" || root.dashboard-vcp-tab == "raw" || vcp.category == root.dashboard-vcp-tab;
+                                                height: (root.dashboard-vcp-tab == "all" || root.dashboard-vcp-tab == "raw" || vcp.category == root.dashboard-vcp-tab) ? self.preferred-height : 0px;
+                                                clip: true;
+                                                border-radius: 8px;
+                                                background: #1a1e26;
+                                                border-width: 1px;
+                                                border-color: vcp.is-critical ? #f05a4644 : #2a303d;
+
+                                                VerticalLayout {
+                                                    padding: 10px;
+                                                    spacing: 8px;
+
+                                                    HorizontalLayout {
+                                                        alignment: space-between;
+                                                        spacing: 8px;
+
+                                                        HorizontalLayout {
+                                                            spacing: 8px;
+                                                            Rectangle {
+                                                                height: 20px;
+                                                                border-radius: 4px;
+                                                                background: #282e3b;
+                                                                HorizontalLayout {
+                                                                    padding-left: 6px;
+                                                                    padding-right: 6px;
+                                                                    Text {
+                                                                        text: vcp.hex-code;
+                                                                        color: root.accent-main;
+                                                                        font-size: 10.5px;
+                                                                        font-weight: 700;
+                                                                        vertical-alignment: center;
+                                                                    }
+                                                                }
+                                                            }
+                                                            Text {
+                                                                text: root.is-en ? vcp.name-en : vcp.name-it;
+                                                                color: #e9edf5;
+                                                                font-size: 12.5px;
+                                                                font-weight: 600;
+                                                                vertical-alignment: center;
+                                                            }
+                                                            if vcp.is-critical : Text {
+                                                                text: root.is-en ? "[Critical]" : "[Critico]";
+                                                                color: #ff9d8f;
+                                                                font-size: 10.5px;
+                                                                font-weight: 600;
+                                                                vertical-alignment: center;
+                                                            }
+                                                        }
+
+                                                        Text {
+                                                            text: vcp.is-read-only
+                                                                ? (root.is-en ? "RO · \{vcp.current}" : "Sola lettura · \{vcp.current}")
+                                                                : "\{vcp.current} / \{vcp.max}";
+                                                            color: #9da5b4;
+                                                            font-size: 11.5px;
+                                                            font-weight: 600;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+
+                                                    if !vcp.is-read-only && vcp.is-continuous : NeonSlider {
+                                                        value: vcp.current;
+                                                        minimum: 0;
+                                                        maximum: Math.max(1, vcp.max);
+                                                        track-color: root.accent-main;
+                                                        glow-style: root.glow-style;
+                                                        changed(val) => {
+                                                            if (vcp.is-critical) {
+                                                                root.confirm-vcp-monitor-id = root.current-monitor.id;
+                                                                root.confirm-vcp-code = vcp.code;
+                                                                root.confirm-vcp-value = val;
+                                                                root.confirm-vcp-title = root.is-en ? vcp.name-en : vcp.name-it;
+                                                                root.confirm-vcp-desc = root.is-en
+                                                                    ? "Apply value \{val} to critical VCP \{vcp.hex-code}?"
+                                                                    : "Applicare il valore \{val} al registro critico \{vcp.hex-code}?";
+                                                                root.confirm-vcp-open = true;
+                                                            } else {
+                                                                root.set-vcp(root.current-monitor.id, vcp.code, val);
+                                                            }
+                                                        }
+                                                    }
+
+                                                    if !vcp.is-read-only && !vcp.is-continuous && vcp.options.length > 0 : HorizontalLayout {
+                                                        spacing: 6px;
+                                                        for opt in vcp.options : TitaniumChip {
+                                                            text: opt.label;
+                                                            active: vcp.current == opt.value;
+                                                            subtle-danger: vcp.is-critical;
+                                                            accent: root.accent-main;
+                                                            glow-style: root.glow-style;
+                                                            clicked => {
+                                                                if (vcp.is-critical) {
+                                                                    root.confirm-vcp-monitor-id = root.current-monitor.id;
+                                                                    root.confirm-vcp-code = vcp.code;
+                                                                    root.confirm-vcp-value = opt.value;
+                                                                    root.confirm-vcp-title = root.is-en ? vcp.name-en : vcp.name-it;
+                                                                    root.confirm-vcp-desc = root.is-en
+                                                                        ? "Execute '\{opt.label}' on critical register \{vcp.hex-code}?"
+                                                                        : "Eseguire '\{opt.label}' sul registro critico \{vcp.hex-code}?";
+                                                                    root.confirm-vcp-open = true;
+                                                                } else {
+                                                                    root.set-vcp(root.current-monitor.id, vcp.code, opt.value);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    if !vcp.is-read-only && !vcp.is-continuous && vcp.options.length == 0 : HorizontalLayout {
+                                                        spacing: 8px;
+                                                        NeonSlider {
+                                                            horizontal-stretch: 1;
+                                                            value: vcp.current;
+                                                            minimum: 0;
+                                                            maximum: Math.max(1, vcp.max);
+                                                            track-color: root.accent-main;
+                                                            glow-style: root.glow-style;
+                                                            changed(val) => {
+                                                                if (vcp.is-critical) {
+                                                                    root.confirm-vcp-monitor-id = root.current-monitor.id;
+                                                                    root.confirm-vcp-code = vcp.code;
+                                                                    root.confirm-vcp-value = val;
+                                                                    root.confirm-vcp-title = root.is-en ? vcp.name-en : vcp.name-it;
+                                                                    root.confirm-vcp-desc = root.is-en
+                                                                        ? "Set raw critical VCP \{vcp.hex-code} to \{val}?"
+                                                                        : "Impostare il registro critico \{vcp.hex-code} a \{val}?";
+                                                                    root.confirm-vcp-open = true;
+                                                                } else {
+                                                                    root.set-vcp(root.current-monitor.id, vcp.code, val);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -3320,21 +3973,30 @@ export component AppWindow inherits Window {
                                                         }
                                                     }
                                                 }
-                                                if root.update-available || root.update-downloading || root.update-installing : TitaniumChip {
-                                                    text: root.update-installing
-                                                        ? (root.is-en ? "Installing..." : "Installazione...")
-                                                        : (root.update-downloading
-                                                            ? (root.update-indeterminate
-                                                                ? (root.is-en ? "Downloading..." : "Download...")
-                                                                : (root.is-en ? "Download \{Math.round(root.update-progress * 100)}%..." : "Download \{Math.round(root.update-progress * 100)}%..."))
-                                                            : (root.update-failed
-                                                                ? (root.is-en ? "Retry Update" : "Riprova Aggiornamento")
-                                                                : (root.is-en ? "Update Now" : "Aggiorna Ora")));
+                                                if root.update-available || root.update-downloading || root.update-installing || root.update-ready-to-restart : TitaniumChip {
+                                                    text: root.update-ready-to-restart
+                                                        ? (root.is-en ? "Restart Now" : "Riavvia Ora")
+                                                        : (root.update-installing
+                                                            ? (root.is-en ? "Installing..." : "Installazione...")
+                                                            : (root.update-downloading
+                                                                ? (root.update-indeterminate
+                                                                    ? (root.is-en ? "Downloading..." : "Download...")
+                                                                    : (root.is-en ? "Download \{Math.round(root.update-progress * 100)}%..." : "Download \{Math.round(root.update-progress * 100)}%..."))
+                                                                : (root.update-failed
+                                                                    ? (root.is-en ? "Retry Update" : "Riprova Aggiornamento")
+                                                                    : (root.is-en ? "Update Now" : "Aggiorna Ora"))));
                                                     active: true;
-                                                    enabled: !root.update-downloading && !root.update-installing;
-                                                    accent: root.accent-main;
+                                                    enabled: root.update-ready-to-restart || (!root.update-downloading && !root.update-installing);
+                                                    accent: root.update-ready-to-restart ? #39d353 : root.accent-main;
                                                     glow-style: root.glow-style;
-                                                    clicked => { root.install-update(); }
+                                                    clicked => {
+                                                        if (root.update-ready-to-restart) {
+                                                            root.restart-for-update();
+                                                        } else {
+                                                            root.show-update-modal = true;
+                                                            root.install-update();
+                                                        }
+                                                    }
                                                 }
                                                 TitaniumChip {
                                                     text: root.is-en ? "Quit App" : "Esci Completamente";
@@ -3346,7 +4008,7 @@ export component AppWindow inherits Window {
                                             }
                                         }
 
-                                        if root.update-downloading || root.update-installing : VerticalLayout {
+                                        if root.update-downloading || root.update-installing || root.update-ready-to-restart : VerticalLayout {
                                             spacing: 6px;
                                             HorizontalLayout {
                                                 alignment: space-between;
@@ -3363,8 +4025,8 @@ export component AppWindow inherits Window {
                                                 }
                                             }
                                             Rectangle {
-                                                height: 6px;
-                                                border-radius: 3px;
+                                                height: 8px;
+                                                border-radius: 4px;
                                                 background: #1a1e26;
                                                 border-width: 1px;
                                                 border-color: #2e3442;
@@ -3373,16 +4035,16 @@ export component AppWindow inherits Window {
                                                 Rectangle {
                                                     y: 0px;
                                                     height: parent.height;
-                                                    border-radius: 3px;
-                                                    x: root.update-installing
+                                                    border-radius: 4px;
+                                                    x: (root.update-installing || root.update-ready-to-restart)
                                                         ? 0px
                                                         : (root.update-indeterminate ? parent.width * 0.275 : 0px);
-                                                    width: root.update-installing
+                                                    width: (root.update-installing || root.update-ready-to-restart)
                                                         ? parent.width
                                                         : (root.update-indeterminate
                                                             ? parent.width * 0.45
                                                             : parent.width * Math.clamp(root.update-progress, 0.0, 1.0));
-                                                    background: root.accent-main;
+                                                    background: root.update-ready-to-restart ? #39d353 : root.accent-main;
                                                     animate width {
                                                         duration: SpringTheme.animations-enabled ? 160ms : 0ms;
                                                         easing: ease-out;
@@ -3400,16 +4062,247 @@ export component AppWindow inherits Window {
                 }
             }
         }
+
+        // ====================================================================
+        // OVERLAY MODALE AGGIORNAMENTO (ACCESSIBILE DA QUALSIASI VISTA)
+        // ====================================================================
+        if root.show-update-modal : Rectangle {
+            width: 100%;
+            height: 100%;
+            background: #0d1016b8;
+
+            TouchArea {
+                clicked => {
+                    if (!root.update-downloading && !root.update-installing) {
+                        root.show-update-modal = false;
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 470px;
+                height: update-modal-col.preferred-height;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                border-radius: 14px;
+                background: #1f232c;
+                border-width: 1.5px;
+                border-color: root.update-ready-to-restart ? #39d353 : root.accent-main.with-alpha(0.7);
+
+                TouchArea {}
+
+                update-modal-col := VerticalLayout {
+                    padding: 22px;
+                    spacing: 14px;
+
+                    HorizontalLayout {
+                        alignment: space-between;
+                        VerticalLayout {
+                            spacing: 2px;
+                            Text {
+                                text: root.update-ready-to-restart
+                                    ? (root.is-en ? "Update v\{root.latest-version} Ready" : "Aggiornamento v\{root.latest-version} Pronto")
+                                    : (root.is-en ? "Monitor Manager Update v\{root.latest-version}" : "Aggiornamento Monitor Manager v\{root.latest-version}");
+                                color: #ffffff;
+                                font-size: 16px;
+                                font-weight: 700;
+                            }
+                            Text {
+                                text: root.update-status-text;
+                                color: root.update-failed ? #ffb4a8 : #9da5b4;
+                                font-size: 11.5px;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        if !root.update-downloading && !root.update-installing : TitaniumChip {
+                            text: "X";
+                            accent: root.accent-main;
+                            glow-style: root.glow-style;
+                            clicked => { root.show-update-modal = false; }
+                        }
+                    }
+
+                    // Step indicator: Verifica -> Download -> Pronto al riavvio
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: root.update-progress-phase != ""
+                                ? root.update-progress-phase
+                                : (root.update-ready-to-restart
+                                    ? (root.is-en ? "Phase 3/3 · Ready to restart" : "Fase 3/3 · Pronto al riavvio")
+                                    : (root.update-downloading
+                                        ? (root.is-en ? "Phase 2/3 · Downloading binary" : "Fase 2/3 · Download eseguibile")
+                                        : (root.is-en ? "Phase 1/3 · Release verified" : "Fase 1/3 · Versione verificata")));
+                            color: #e9edf5;
+                            font-size: 12px;
+                            font-weight: 600;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: root.update-progress-detail;
+                            color: root.accent-main;
+                            font-size: 12px;
+                            font-weight: 600;
+                        }
+                    }
+
+                    // Barra di progressione ampia dedicata
+                    Rectangle {
+                        height: 12px;
+                        border-radius: 6px;
+                        background: #14171f;
+                        border-width: 1px;
+                        border-color: #2f3544;
+                        clip: true;
+
+                        Rectangle {
+                            y: 0px;
+                            height: parent.height;
+                            border-radius: 6px;
+                            x: (root.update-installing || root.update-ready-to-restart)
+                                ? 0px
+                                : (root.update-indeterminate ? parent.width * 0.25 : 0px);
+                            width: (root.update-installing || root.update-ready-to-restart)
+                                ? parent.width
+                                : (root.update-indeterminate
+                                    ? parent.width * 0.5
+                                    : (root.update-downloading
+                                        ? parent.width * Math.clamp(root.update-progress, 0.0, 1.0)
+                                        : 0px));
+                            background: root.update-ready-to-restart ? #39d353 : root.accent-main;
+                            animate width {
+                                duration: SpringTheme.animations-enabled ? 150ms : 0ms;
+                                easing: ease-out;
+                            }
+                        }
+                    }
+
+                    // Bottoni dinamici modale updater
+                    HorizontalLayout {
+                        alignment: end;
+                        spacing: 8px;
+
+                        if !root.update-downloading && !root.update-installing : TitaniumChip {
+                            text: root.is-en ? "Later" : "Chiudi";
+                            accent: root.accent-main;
+                            glow-style: root.glow-style;
+                            clicked => { root.show-update-modal = false; }
+                        }
+
+                        if root.update-downloading : TitaniumChip {
+                            text: root.is-en ? "Cancel Download" : "Annulla Download";
+                            subtle-danger: true;
+                            accent: root.accent-main;
+                            glow-style: root.glow-style;
+                            clicked => { root.cancel-update(); }
+                        }
+
+                        if !root.update-downloading && !root.update-installing && !root.update-ready-to-restart && root.update-available : TitaniumChip {
+                            text: root.update-failed
+                                ? (root.is-en ? "Retry Download" : "Riprova Download")
+                                : (root.is-en ? "Update Now" : "Aggiorna Ora");
+                            active: true;
+                            accent: root.accent-main;
+                            glow-style: root.glow-style;
+                            clicked => { root.install-update(); }
+                        }
+
+                        if root.update-ready-to-restart : TitaniumChip {
+                            text: root.is-en ? "Restart & Apply v\{root.latest-version}" : "Riavvia Ora (v\{root.latest-version})";
+                            active: true;
+                            accent: #39d353;
+                            glow-style: root.glow-style;
+                            clicked => { root.restart-for-update(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ====================================================================
+        // OVERLAY MODALE DI CONFERMA PER VCP CRITICI (RESET / POWER MODE)
+        // ====================================================================
+        if root.confirm-vcp-open : Rectangle {
+            width: 100%;
+            height: 100%;
+            background: #0d1016b8;
+
+            TouchArea {
+                clicked => { root.confirm-vcp-open = false; }
+            }
+
+            Rectangle {
+                width: 420px;
+                height: confirm-col.preferred-height;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                border-radius: 14px;
+                background: #1f232c;
+                border-width: 1.5px;
+                border-color: #f05a46;
+
+                TouchArea {}
+
+                confirm-col := VerticalLayout {
+                    padding: 20px;
+                    spacing: 14px;
+
+                    Text {
+                        text: root.is-en
+                            ? "Confirm Critical Hardware Action"
+                            : "Conferma Azione Hardware Critica";
+                        color: #ffb4a8;
+                        font-size: 15px;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: root.confirm-vcp-title;
+                        color: #ffffff;
+                        font-size: 13.5px;
+                        font-weight: 600;
+                    }
+                    Text {
+                        text: root.confirm-vcp-desc;
+                        color: #c5cbd6;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        alignment: end;
+                        spacing: 8px;
+                        TitaniumChip {
+                            text: root.is-en ? "Cancel" : "Annulla";
+                            accent: root.accent-main;
+                            glow-style: root.glow-style;
+                            clicked => { root.confirm-vcp-open = false; }
+                        }
+                        TitaniumChip {
+                            text: root.is-en ? "Confirm & Execute" : "Conferma ed Esegui";
+                            active: true;
+                            subtle-danger: true;
+                            accent: #f05a46;
+                            glow-style: root.glow-style;
+                            clicked => {
+                                root.confirm-vcp-open = false;
+                                root.set-vcp(root.confirm-vcp-monitor-id, root.confirm-vcp-code, root.confirm-vcp-value);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.14 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
+// FINESTRA INSTALLER SETUP v1.15 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.14";
+    title: "Installazione Monitor Manager v1.15";
     preferred-width: 520px;
-    preferred-height: 410px;
+    preferred-height: 430px;
     background: transparent;
 
     in-out property <bool> opt-desktop: true;
@@ -3418,7 +4311,8 @@ export component SetupWindow inherits Window {
     in-out property <bool> opt-launch: true;
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.14 (Dark Matte Titanium & Acrylic)";
+    in-out property <float> install-progress: 0.0;
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.15 (MCCS Engine, Brand Profiles & DisplayConfig)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -3451,15 +4345,15 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.14";
+                        text: "Monitor Manager v1.15";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
                     }
                     Text {
-                        text: "Dark Matte Titanium & Acrylic · Motore Nativo Slint (~2-8 MB RAM in Tray)";
+                        text: "Dark Matte Titanium · MCCS + Brand Profiles (ASUS TUF/AOC/Philips/KTC)";
                         color: #c5cbd6;
-                        font-size: 12px;
+                        font-size: 11.5px;
                     }
                 }
             }
@@ -3527,6 +4421,28 @@ export component SetupWindow inherits Window {
                     font-size: 12px;
                     font-weight: 600;
                 }
+
+                if root.installing || root.installed : Rectangle {
+                    height: 8px;
+                    border-radius: 4px;
+                    background: #14171f;
+                    border-width: 1px;
+                    border-color: #2e3442;
+                    clip: true;
+
+                    Rectangle {
+                        y: 0px;
+                        height: parent.height;
+                        border-radius: 4px;
+                        x: 0px;
+                        width: parent.width * Math.clamp(root.install-progress, 0.0, 1.0);
+                        background: root.installed ? #39d353 : #f05a46;
+                        animate width {
+                            duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+                            easing: ease-out;
+                        }
+                    }
+                }
             }
         }
 
@@ -3538,7 +4454,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione..." : "Installa v1.14 Ora";
+                    text: root.installing ? "Installazione... \{Math.round(root.install-progress * 100)}%" : "Installa v1.15 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 
-const APP_VERSION: &str = "1.14";
+const APP_VERSION: &str = "1.15";
 const APP_NAME: &str = "Monitor Manager";
 const PAYLOAD_EXE: &[u8] = include_bytes!("../../target/release/monitor-manager.exe");
 
@@ -260,7 +260,11 @@ fn register_uninstaller_and_autostart(
     }
 }
 
-fn perform_installation(options: &InstallOptions) -> Result<PathBuf, String> {
+fn perform_installation<F>(options: &InstallOptions, mut on_progress: F) -> Result<PathBuf, String>
+where
+    F: FnMut(f32, &str),
+{
+    on_progress(0.15, "Chiusura eventuali istanze attive...");
     // Termina altre istanze in esecuzione dell'app, escludendo rigorosamente il processo dell'installer corrente
     let my_pid = std::process::id();
     let filter = format!("PID ne {}", my_pid);
@@ -271,6 +275,7 @@ fn perform_installation(options: &InstallOptions) -> Result<PathBuf, String> {
     // Breve pausa per assicurarsi che i file handle siano stati rilasciati da Windows
     thread::sleep(std::time::Duration::from_millis(300));
 
+    on_progress(0.35, "Creazione cartella di installazione...");
     let install_dir = get_install_dir();
     fs::create_dir_all(&install_dir)
         .map_err(|e| format!("Impossibile creare la cartella di installazione: {}", e))?;
@@ -282,12 +287,14 @@ fn perform_installation(options: &InstallOptions) -> Result<PathBuf, String> {
     let exe_path = install_dir.join("monitor-manager.exe");
     let icon_path = install_dir.join("MonitorManager.ico");
 
+    on_progress(0.60, "Estrazione eseguibile Monitor Manager...");
     fs::write(&exe_path, PAYLOAD_EXE)
         .map_err(|e| format!("Impossibile scrivere monitor-manager.exe: {}", e))?;
 
     let ico_bytes = build_ico_bytes();
     let _ = fs::write(&icon_path, ico_bytes);
 
+    on_progress(0.80, "Creazione collegamenti di sistema...");
     if options.start_menu_shortcut {
         if let Ok(appdata) = env::var("APPDATA") {
             let start_dir = PathBuf::from(appdata).join("Microsoft\\Windows\\Start Menu\\Programs");
@@ -306,7 +313,9 @@ fn perform_installation(options: &InstallOptions) -> Result<PathBuf, String> {
         }
     }
 
+    on_progress(0.95, "Registrazione impostazioni Windows...");
     register_uninstaller_and_autostart(&install_dir, &exe_path, &icon_path, options.autostart);
+    on_progress(1.0, "Installazione completata!");
     Ok(exe_path)
 }
 
@@ -321,7 +330,7 @@ fn main() {
             start_menu_shortcut: true,
             autostart: false,
         };
-        let _ = perform_installation(&opts);
+        let _ = perform_installation(&opts, |_, _| {});
         return;
     }
 
@@ -334,6 +343,7 @@ fn main() {
     ui.on_start_install(move || {
         if let Some(u) = uw.upgrade() {
             u.set_installing(true);
+            u.set_install_progress(0.05);
             u.set_status_text(SharedString::from(
                 format!("Installazione di Monitor Manager v{} in corso...", APP_VERSION).as_str(),
             ));
@@ -343,25 +353,43 @@ fn main() {
                 autostart: u.get_opt_autostart(),
             };
             let uw_thread = uw.clone();
-            thread::spawn(move || match perform_installation(&opts) {
-                Ok(_) => {
+            thread::spawn(move || {
+                let uw_prog = uw_thread.clone();
+                let res = perform_installation(&opts, |pct, msg| {
+                    let uw_ui = uw_prog.clone();
+                    let m = msg.to_string();
                     let _ = slint::invoke_from_event_loop(move || {
-                        if let Some(u) = uw_thread.upgrade() {
-                            u.set_installing(false);
-                            u.set_installed(true);
-                            u.set_status_text(SharedString::from(
-                                format!("✓ Monitor Manager v{} installato con successo!", APP_VERSION).as_str(),
-                            ));
+                        if let Some(u) = uw_ui.upgrade() {
+                            u.set_install_progress(pct);
+                            u.set_status_text(SharedString::from(m.as_str()));
                         }
                     });
-                }
-                Err(err) => {
-                    let _ = slint::invoke_from_event_loop(move || {
-                        if let Some(u) = uw_thread.upgrade() {
-                            u.set_installing(false);
-                            u.set_status_text(SharedString::from(err.as_str()));
-                        }
-                    });
+                });
+                match res {
+                    Ok(_) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(u) = uw_thread.upgrade() {
+                                u.set_install_progress(1.0);
+                                u.set_installing(false);
+                                u.set_installed(true);
+                                u.set_status_text(SharedString::from(
+                                    format!(
+                                        "✓ Monitor Manager v{} installato con successo!",
+                                        APP_VERSION
+                                    )
+                                    .as_str(),
+                                ));
+                            }
+                        });
+                    }
+                    Err(err) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(u) = uw_thread.upgrade() {
+                                u.set_installing(false);
+                                u.set_status_text(SharedString::from(err.as_str()));
+                            }
+                        });
+                    }
                 }
             });
         }

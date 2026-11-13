@@ -4,8 +4,9 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
-pub const APP_VERSION: &str = "1.14";
+pub const APP_VERSION: &str = "1.15";
 pub const GITHUB_REPO: &str = "riccardo-bettini/Monitor-Manager";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,6 +20,7 @@ pub struct UpdateProgress {
     pub downloaded_bytes: u64,
     pub total_bytes: u64,
     pub fraction: f32,
+    pub speed_bps: f64,
     pub phase: UpdatePhase,
 }
 
@@ -181,21 +183,29 @@ pub fn check_for_updates() -> UpdateCheckResult {
     }
 }
 
-/// Formatta percentuale e MB scaricati per la UI della barra di progressione
-pub fn format_progress_detail(downloaded: u64, total: u64) -> String {
+/// Formatta percentuale, MB scaricati e velocità per la UI della barra di progressione
+pub fn format_progress_detail(downloaded: u64, total: u64, speed_bps: f64) -> String {
     let dl_mb = downloaded as f64 / (1024.0 * 1024.0);
+    let speed_str = if speed_bps > 1024.0 {
+        format!(" · {:.1} MB/s", speed_bps / (1024.0 * 1024.0))
+    } else {
+        String::new()
+    };
     if total > 0 {
         let tot_mb = total as f64 / (1024.0 * 1024.0);
-        let pct = ((downloaded as f64 / total as f64) * 100.0).clamp(0.0, 100.0).round() as u32;
-        format!("{}% · {:.1} / {:.1} MB", pct, dl_mb, tot_mb)
+        let pct = ((downloaded as f64 / total as f64) * 100.0)
+            .clamp(0.0, 100.0)
+            .round() as u32;
+        format!("{}% · {:.1} / {:.1} MB{}", pct, dl_mb, tot_mb, speed_str)
     } else {
-        format!("{:.1} MB", dl_mb)
+        format!("{:.1} MB{}", dl_mb, speed_str)
     }
 }
 
 /// Scarica l'aggiornamento in streaming notificando il progresso e restituisce il percorso dell'eseguibile da avviare al riavvio
 pub fn perform_self_update_with_progress<F>(
     download_url: &str,
+    target_version: &str,
     fallback_total_bytes: u64,
     cancel_flag: &AtomicBool,
     mut on_progress: F,
@@ -211,7 +221,7 @@ where
     let is_setup = download_url.to_lowercase().contains("setup");
 
     let resp = ureq::get(download_url)
-        .set("User-Agent", "Monitor-Manager-Updater/1.14")
+        .set("User-Agent", "Monitor-Manager-Updater/1.15")
         .call()
         .map_err(|e| format!("Errore download aggiornamento: {}", e))?;
 
@@ -229,11 +239,13 @@ where
     let mut reader = resp.into_reader();
     let mut chunk = [0u8; 32768];
     let mut last_reported_bytes: u64 = 0;
+    let start_time = Instant::now();
 
     on_progress(UpdateProgress {
         downloaded_bytes: 0,
         total_bytes,
         fraction: 0.0,
+        speed_bps: 0.0,
         phase: UpdatePhase::Downloading,
     });
 
@@ -253,6 +265,8 @@ where
             || (total_bytes > 0 && downloaded >= total_bytes)
         {
             last_reported_bytes = downloaded;
+            let elapsed = start_time.elapsed().as_secs_f64().max(0.05);
+            let speed_bps = downloaded as f64 / elapsed;
             let fraction = if total_bytes > 0 {
                 (downloaded as f32 / total_bytes as f32).clamp(0.0, 1.0)
             } else {
@@ -262,6 +276,7 @@ where
                 downloaded_bytes: downloaded,
                 total_bytes,
                 fraction,
+                speed_bps,
                 phase: UpdatePhase::Downloading,
             });
         }
@@ -276,15 +291,22 @@ where
     }
 
     let final_dl = bytes.len() as u64;
+    let elapsed = start_time.elapsed().as_secs_f64().max(0.05);
     on_progress(UpdateProgress {
         downloaded_bytes: final_dl,
         total_bytes: if total_bytes > 0 { total_bytes } else { final_dl },
         fraction: 1.0,
+        speed_bps: final_dl as f64 / elapsed,
         phase: UpdatePhase::Installing,
     });
 
     if is_setup {
-        let temp_setup = env::temp_dir().join(format!("Monitor-Manager-Setup-v{}.exe", APP_VERSION));
+        let ver_clean = if target_version.trim().is_empty() {
+            APP_VERSION
+        } else {
+            target_version.trim()
+        };
+        let temp_setup = env::temp_dir().join(format!("Monitor-Manager-Setup-v{}.exe", ver_clean));
         fs::write(&temp_setup, &bytes)
             .map_err(|e| format!("Errore scrittura installer temporaneo: {}", e))?;
         Ok(temp_setup)
@@ -316,10 +338,10 @@ mod tests {
 
     #[test]
     fn progress_detail_formats_percent_and_megabytes() {
-        let full = format_progress_detail(5 * 1024 * 1024, 10 * 1024 * 1024);
-        assert_eq!(full, "50% · 5.0 / 10.0 MB");
+        let full = format_progress_detail(5 * 1024 * 1024, 10 * 1024 * 1024, 2.5 * 1024.0 * 1024.0);
+        assert_eq!(full, "50% · 5.0 / 10.0 MB · 2.5 MB/s");
 
-        let unknown = format_progress_detail(2 * 1024 * 1024, 0);
+        let unknown = format_progress_detail(2 * 1024 * 1024, 0, 0.0);
         assert_eq!(unknown, "2.0 MB");
     }
 
@@ -329,6 +351,7 @@ mod tests {
         let mut updates = Vec::new();
         let res = perform_self_update_with_progress(
             "https://example.invalid/monitor-manager.exe",
+            "1.16",
             1000,
             &cancel,
             |p| updates.push(p),
