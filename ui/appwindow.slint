@@ -673,15 +673,26 @@ component TitaniumChip inherits Rectangle {
     in property <bool> active: false;
     in property <color> accent: #ff5733;
     in property <string> glow-style: "subtle";
+    in property <bool> enabled: true;
+    in property <bool> subtle-danger: false;
     callback clicked();
 
     height: 30px;
     border-radius: 7px;
-    background: root.active ? root.accent.with-alpha(0.18) : (ta-chip.has-hover ? #323846 : #282d38);
-    border-width: root.active ? (root.glow-style == "intense" ? 2px : 1.5px) : 1px;
-    border-color: root.active ? root.accent : (ta-chip.has-hover ? root.accent.with-alpha(0.4) : #363c4a);
+    opacity: root.enabled ? 1.0 : 0.55;
+    background: !root.enabled
+        ? #232732
+        : (root.subtle-danger
+            ? (ta-chip.has-hover ? #f05a46.with-alpha(0.24) : #f05a46.with-alpha(0.14))
+            : (root.active ? root.accent.with-alpha(0.18) : (ta-chip.has-hover ? #323846 : #282d38)));
+    border-width: root.active && !root.subtle-danger ? (root.glow-style == "intense" ? 2px : 1.5px) : 1px;
+    border-color: !root.enabled
+        ? #303542
+        : (root.subtle-danger
+            ? (ta-chip.has-hover ? #ff705c : #f05a46.with-alpha(0.65))
+            : (root.active ? root.accent : (ta-chip.has-hover ? root.accent.with-alpha(0.4) : #363c4a)));
 
-    animate background, border-color {
+    animate background, border-color, opacity {
         duration: SpringTheme.animations-enabled ? 180ms : 0ms;
         easing: cubic-bezier(0.34, 1.4, 0.64, 1);
     }
@@ -692,7 +703,7 @@ component TitaniumChip inherits Rectangle {
         alignment: center;
         Text {
             text: root.text;
-            color: root.active ? #ffffff : #dce1eb;
+            color: !root.enabled ? #8b93a6 : (root.subtle-danger ? #ffd4ce : (root.active ? #ffffff : #dce1eb));
             font-size: 12px;
             font-weight: root.active ? 700 : 500;
             vertical-alignment: center;
@@ -700,8 +711,13 @@ component TitaniumChip inherits Rectangle {
     }
 
     ta-chip := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if root.enabled {
+                root.clicked();
+            }
+        }
     }
 }
 
@@ -1004,12 +1020,128 @@ component HomeMonitorCard inherits Rectangle {
     }
 }
 
+component ReorderCardRow inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <int> rank: 1;
+    in property <color> accent-main: #f05a46;
+    in property <bool> is-en: false;
+    in property <bool> is-dragged: false;
+    in property <bool> is-hovered: false;
+    in property <bool> dimmed: false;
+
+    height: 68px;
+    border-radius: 12px;
+    background: root.is-dragged ? #2c3342 : (root.is-hovered ? #262b36 : #21252e);
+    border-width: root.is-dragged ? 2px : (root.is-hovered ? 1.5px : 1px);
+    border-color: root.is-dragged ? root.accent-main : (root.is-hovered ? root.accent-main.with-alpha(0.45) : #2d323e);
+    opacity: root.dimmed ? 0.72 : 1.0;
+    drop-shadow-blur: root.is-dragged ? 20px : 0px;
+    drop-shadow-color: root.is-dragged ? #00000090 : transparent;
+    drop-shadow-offset-y: root.is-dragged ? 8px : 0px;
+
+    animate background, border-color, opacity {
+        duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+
+    HorizontalLayout {
+        padding-left: 20px;
+        padding-right: 20px;
+        alignment: space-between;
+
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+
+            // Badge posizione numerica (#1, #2...)
+            Rectangle {
+                width: 34px;
+                height: 34px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 8px;
+                background: (root.is-dragged || root.is-hovered)
+                    ? root.accent-main.with-alpha(0.30)
+                    : root.accent-main.with-alpha(0.18);
+                border-width: 1px;
+                border-color: root.accent-main;
+
+                Text {
+                    text: "#\{root.rank}";
+                    color: root.accent-main;
+                    font-size: 13px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 4px;
+
+                Text {
+                    text: root.mon.name;
+                    color: #ffffff;
+                    font-size: 15px;
+                    font-weight: 700;
+                }
+                Text {
+                    text: root.mon.ddc-supported
+                        ? "\{root.mon.brand} · \{root.mon.resolution} · DDC/CI Attivo"
+                        : (root.mon.is-internal-wmi
+                            ? "\{root.mon.brand} · \{root.mon.resolution} · WMI Integrato"
+                            : "\{root.mon.brand} · \{root.mon.resolution} · Solo Lettura");
+                    color: #9da5b4;
+                    font-size: 11px;
+                }
+            }
+        }
+
+        // Maniglia di presa vettoriale a 6 punti
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: center;
+
+            Text {
+                text: root.is-dragged
+                    ? (root.is-en ? "Position #\{root.rank}" : "Posizione #\{root.rank}")
+                    : (root.is-en ? "Drag to reorder" : "Trascina per ordinare");
+                color: root.is-dragged ? root.accent-main : (root.is-hovered ? #c3c9d5 : #6c7382);
+                font-size: 11.5px;
+                font-weight: root.is-dragged ? 700 : 500;
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                width: 34px;
+                height: 34px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 7px;
+                background: root.is-dragged
+                    ? root.accent-main.with-alpha(0.25)
+                    : (root.is-hovered ? #2e3442 : #1c2028);
+                border-width: 1px;
+                border-color: root.is-dragged
+                    ? root.accent-main
+                    : (root.is-hovered ? #40495c : #252a35);
+
+                DragGripGlyph {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon-color: root.is-dragged ? root.accent-main : (root.is-hovered ? #ffffff : #8a92a2);
+                }
+            }
+        }
+    }
+}
+
 // ============================================================================
 // FINESTRA PRINCIPALE: DARK MATTE TITANIUM (BORDERLESS CON TOP BAR INTEGRATA)
 // ============================================================================
 export component AppWindow inherits Window {
     title: "Monitor Manager";
     no-frame: true;
+    resize-border-width: 6px;
     preferred-width: 980px;
     preferred-height: 600px;
     min-width: 860px;
@@ -1103,10 +1235,18 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.13";
-    in-out property <string> update-status-text: "Monitor Manager v1.13 (Frosted Acrylic, WMI Laptop & Native Vector UI)";
+    in-out property <string> app-version: "1.14";
+    in-out property <string> update-status-text: "Monitor Manager v1.14 (Frosted Acrylic, WMI Laptop & Native Vector UI)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.13";
+    in-out property <string> latest-version: "1.14";
+    in-out property <bool> update-checking: false;
+    in-out property <bool> update-downloading: false;
+    in-out property <bool> update-installing: false;
+    in-out property <bool> update-failed: false;
+    in-out property <float> update-progress: 0.0;
+    in-out property <bool> update-indeterminate: false;
+    in-out property <string> update-progress-phase: "";
+    in-out property <string> update-progress-detail: "";
 
     // --- Callbacks verso Rust ---
     callback set-vcp(int /* monitor_id */, int /* vcp_code */, int /* value */);
@@ -1116,11 +1256,12 @@ export component AppWindow inherits Window {
     callback save-settings();
     callback check-updates();
     callback install-update();
+    callback cancel-update();
     callback quit-app();
     callback minimize-window();
     callback toggle-maximize-window();
     callback close-window();
-    callback move-monitor(int /* index */, int /* direction: -1 up, 1 down */);
+    callback move-monitor(int /* from_idx */, int /* to_idx */);
     callback toggle-acrylic(bool);
 
     // --- Palette Colori Reattive ---
@@ -1183,19 +1324,6 @@ export component AppWindow inherits Window {
                 width: 248px;
                 clip: true;
                 background: root.acrylic-enabled ? #14182182 : #20242e;
-
-                // Riflesso morbido d'accento nell'angolo inferiore della sidebar (radiale senza bordi netti)
-                if root.glow-style != "none" : Rectangle {
-                    x: -60px;
-                    y: parent.height - 260px;
-                    width: 420px;
-                    height: 420px;
-                    background: @radial-gradient(
-                        circle,
-                        root.accent-main.with-alpha(root.glow-style == "intense" ? 0.24 : 0.14) 0%,
-                        transparent 70%
-                    );
-                }
 
                 // Sottile riflesso superiore di profondità vetro
                 if root.acrylic-enabled : Rectangle {
@@ -1394,25 +1522,13 @@ export component AppWindow inherits Window {
                                         }
                                     }
 
-                                    // Alone Neon Glow esterno quando il monitor è selezionato
-                                    if mon-entry.is-mon-active && root.glow-style != "none" : Rectangle {
-                                        x: -2px;
-                                        y: -2px;
-                                        width: parent.width + 4px;
-                                        height: parent.height + 4px;
-                                        border-radius: 12px;
-                                        background: root.accent-main.with-alpha(root.glow-style == "intense" ? 0.30 : 0.16);
-                                        border-width: 1px;
-                                        border-color: root.accent-main.with-alpha(0.45);
-                                    }
-
                                     // Card interna del monitor con hover & selezione animata a molla
                                     Rectangle {
                                         width: 100%;
                                         height: 100%;
                                         border-radius: 9px;
                                         background: mon-entry.is-mon-active ? #2b303c : (mon-ta.has-hover ? #222631 : transparent);
-                                        border-width: mon-entry.is-mon-active ? (root.glow-style == "intense" ? 2px : 1.5px) : (mon-ta.has-hover ? 1px : 0px);
+                                        border-width: mon-entry.is-mon-active ? 1.5px : (mon-ta.has-hover ? 1px : 0px);
                                         border-color: mon-entry.is-mon-active ? root.accent-main : (mon-ta.has-hover ? root.accent-main.with-alpha(0.35) : transparent);
 
                                         animate background, border-color {
@@ -1700,29 +1816,55 @@ export component AppWindow inherits Window {
 
                                 HorizontalLayout {
                                     alignment: start;
-                                    if root.update-available : Rectangle {
+                                    if root.update-available || root.update-downloading || root.update-installing : Rectangle {
                                         height: 22px;
                                         y: (parent.height - self.height) / 2;
                                         border-radius: 5px;
-                                        background: root.accent-main.with-alpha(0.22);
+                                        clip: true;
+                                        background: root.accent-main.with-alpha(root.update-downloading || root.update-installing ? 0.28 : 0.22);
                                         border-width: 1px;
                                         border-color: root.accent-main;
                                         HorizontalLayout {
                                             padding-left: 8px;
                                             padding-right: 8px;
                                             Text {
-                                                text: root.is-en
-                                                    ? "Update v\{root.latest-version} ready"
-                                                    : "Aggiornamento v\{root.latest-version} pronto";
+                                                text: root.update-installing
+                                                    ? (root.is-en ? "Installing v\{root.latest-version}..." : "Installazione v\{root.latest-version}...")
+                                                    : (root.update-downloading
+                                                        ? (root.update-indeterminate
+                                                            ? (root.is-en ? "Downloading v\{root.latest-version}..." : "Download v\{root.latest-version}...")
+                                                            : (root.is-en ? "Downloading v\{root.latest-version} · \{Math.round(root.update-progress * 100)}%" : "Download v\{root.latest-version} · \{Math.round(root.update-progress * 100)}%"))
+                                                        : (root.is-en ? "Update v\{root.latest-version} ready" : "Aggiornamento v\{root.latest-version} pronto"));
                                                 color: #ffffff;
                                                 font-size: 11px;
                                                 font-weight: 600;
                                                 vertical-alignment: center;
                                             }
                                         }
+                                        if root.update-downloading || root.update-installing : Rectangle {
+                                            y: parent.height - 2px;
+                                            height: 2px;
+                                            x: root.update-installing ? 0px : (root.update-indeterminate ? parent.width * 0.25 : 0px);
+                                            width: root.update-installing
+                                                ? parent.width
+                                                : (root.update-indeterminate
+                                                    ? parent.width * 0.5
+                                                    : parent.width * Math.clamp(root.update-progress, 0.0, 1.0));
+                                            background: root.accent-main;
+                                            animate width {
+                                                duration: SpringTheme.animations-enabled ? 140ms : 0ms;
+                                                easing: ease-out;
+                                            }
+                                        }
                                         TouchArea {
                                             mouse-cursor: pointer;
-                                            clicked => { root.install-update(); }
+                                            clicked => {
+                                                if root.update-downloading || root.update-installing {
+                                                    root.active-view = "settings";
+                                                } else {
+                                                    root.install-update();
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2596,110 +2738,101 @@ export component AppWindow inherits Window {
                                     background: transparent;
 
                                     property <int> dragging-row: -1;
-                                    property <int> hovered-row: drag-overlay.has-hover && root.monitors.length > 0
+                                    property <int> target-row: -1;
+                                    property <bool> dragging-active: false;
+                                    property <bool> drop-settling: false;
+                                    property <bool> suppress-slot-anim: false;
+                                    property <length> grab-offset-y: 34px;
+                                    property <length> drag-y: 0px;
+                                    property <int> hovered-row: drag-overlay.has-hover && !dragging-active && !drop-settling && root.monitors.length > 0
                                         ? Math.clamp(Math.floor(drag-overlay.mouse-y / 78px), 0, root.monitors.length - 1)
                                         : -1;
 
-                                    VerticalLayout {
-                                        width: 100%;
-                                        spacing: 10px;
+                                    reset-anim-timer := Timer {
+                                        interval: 24ms;
+                                        running: false;
+                                        triggered => {
+                                            self.running = false;
+                                            reorder-list.suppress-slot-anim = false;
+                                        }
+                                    }
 
-                                        for mon[m-idx] in root.monitors : Rectangle {
-                                            property <bool> is-dragged: reorder-list.dragging-row == m-idx;
-                                            property <bool> is-hovered: reorder-list.dragging-row < 0 && reorder-list.hovered-row == m-idx;
-
-                                            height: 68px;
-                                            border-radius: 12px;
-                                            background: is-dragged ? #2c3342 : (is-hovered ? #262b36 : #21252e);
-                                            border-width: (is-dragged || is-hovered) ? 1.5px : 1px;
-                                            border-color: is-dragged ? root.accent-main : (is-hovered ? root.accent-main.with-alpha(0.45) : #2d323e);
-
-                                            animate background, border-color {
-                                                duration: SpringTheme.animations-enabled ? 160ms : 0ms;
-                                                easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                    settle-timer := Timer {
+                                        interval: SpringTheme.animations-enabled ? 195ms : 1ms;
+                                        running: false;
+                                        triggered => {
+                                            self.running = false;
+                                            reorder-list.suppress-slot-anim = true;
+                                            if (reorder-list.dragging-row >= 0 && reorder-list.target-row >= 0 && reorder-list.dragging-row != reorder-list.target-row) {
+                                                root.move-monitor(reorder-list.dragging-row, reorder-list.target-row);
                                             }
+                                            reorder-list.dragging-row = -1;
+                                            reorder-list.target-row = -1;
+                                            reorder-list.drop-settling = false;
+                                            reset-anim-timer.running = true;
+                                        }
+                                    }
 
-                                            HorizontalLayout {
-                                                padding-left: 20px;
-                                                padding-right: 20px;
-                                                alignment: space-between;
+                                    // Guida slot di destinazione durante il trascinamento
+                                    if reorder-list.dragging-row >= 0 && reorder-list.target-row >= 0 : Rectangle {
+                                        x: 0px;
+                                        y: reorder-list.target-row * 78px;
+                                        width: parent.width;
+                                        height: 68px;
+                                        border-radius: 12px;
+                                        background: root.accent-main.with-alpha(0.07);
+                                        border-width: 1.5px;
+                                        border-color: root.accent-main.with-alpha(0.5);
 
-                                                HorizontalLayout {
-                                                    spacing: 16px;
-                                                    alignment: start;
+                                        animate y {
+                                            duration: (SpringTheme.animations-enabled && !reorder-list.suppress-slot-anim) ? 180ms : 0ms;
+                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                        }
+                                    }
 
-                                                    // Badge posizione numerica (#1, #2...)
-                                                    Rectangle {
-                                                        width: 34px;
-                                                        height: 34px;
-                                                        y: (parent.height - self.height) / 2;
-                                                        border-radius: 8px;
-                                                        background: (is-dragged || is-hovered) ? root.accent-main.with-alpha(0.30) : root.accent-main.with-alpha(0.18);
-                                                        border-width: 1px;
-                                                        border-color: root.accent-main;
+                                    // Card monitor stazionarie che scivolano fluidamente negli slot liberi
+                                    for mon[m-idx] in root.monitors : ReorderCardRow {
+                                        property <int> visual-slot: reorder-list.dragging-row < 0
+                                            ? m-idx
+                                            : (reorder-list.dragging-row < reorder-list.target-row
+                                                ? (m-idx > reorder-list.dragging-row && m-idx <= reorder-list.target-row ? m-idx - 1 : m-idx)
+                                                : (reorder-list.dragging-row > reorder-list.target-row
+                                                    ? (m-idx >= reorder-list.target-row && m-idx < reorder-list.dragging-row ? m-idx + 1 : m-idx)
+                                                    : m-idx));
 
-                                                        Text {
-                                                            text: "#\{m-idx + 1}";
-                                                            color: root.accent-main;
-                                                            font-size: 13px;
-                                                            font-weight: 700;
-                                                            horizontal-alignment: center;
-                                                            vertical-alignment: center;
-                                                        }
-                                                    }
+                                        visible: m-idx != reorder-list.dragging-row;
+                                        x: 0px;
+                                        y: visual-slot * 78px;
+                                        width: parent.width;
+                                        mon: mon;
+                                        rank: visual-slot + 1;
+                                        accent-main: root.accent-main;
+                                        is-en: root.is-en;
+                                        is-hovered: reorder-list.dragging-row < 0 && reorder-list.hovered-row == m-idx;
+                                        dimmed: reorder-list.dragging-active;
 
-                                                    VerticalLayout {
-                                                        alignment: center;
-                                                        spacing: 4px;
+                                        animate y {
+                                            duration: (SpringTheme.animations-enabled && !reorder-list.suppress-slot-anim) ? 220ms : 0ms;
+                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                        }
+                                    }
 
-                                                        Text {
-                                                            text: mon.name;
-                                                            color: #ffffff;
-                                                            font-size: 15px;
-                                                            font-weight: 700;
-                                                        }
-                                                        Text {
-                                                            text: mon.ddc-supported
-                                                                ? "\{mon.brand} · \{mon.resolution} · DDC/CI Attivo"
-                                                                : (mon.is-internal-wmi
-                                                                    ? "\{mon.brand} · \{mon.resolution} · WMI Integrato"
-                                                                    : "\{mon.brand} · \{mon.resolution} · Solo Lettura");
-                                                            color: #9da5b4;
-                                                            font-size: 11px;
-                                                        }
-                                                    }
-                                                }
+                                    // Card attiva trascinata in primo piano con ombra e snap elastico al rilascio
+                                    if reorder-list.dragging-row >= 0 && reorder-list.dragging-row < root.monitors.length : ReorderCardRow {
+                                        x: -2px;
+                                        y: reorder-list.dragging-active
+                                            ? reorder-list.drag-y
+                                            : reorder-list.target-row * 78px;
+                                        width: parent.width + 4px;
+                                        mon: root.monitors[Math.clamp(reorder-list.dragging-row, 0, Math.max(0, root.monitors.length - 1))];
+                                        rank: Math.max(0, reorder-list.target-row) + 1;
+                                        accent-main: root.accent-main;
+                                        is-en: root.is-en;
+                                        is-dragged: true;
 
-                                                // Maniglia di presa vettoriale a 6 punti
-                                                HorizontalLayout {
-                                                    spacing: 10px;
-                                                    alignment: center;
-
-                                                    Text {
-                                                        text: root.is-en ? "Drag to reorder" : "Trascina per ordinare";
-                                                        color: is-dragged ? root.accent-main : (is-hovered ? #c3c9d5 : #6c7382);
-                                                        font-size: 11.5px;
-                                                        font-weight: 500;
-                                                        vertical-alignment: center;
-                                                    }
-
-                                                    Rectangle {
-                                                        width: 34px;
-                                                        height: 34px;
-                                                        y: (parent.height - self.height) / 2;
-                                                        border-radius: 7px;
-                                                        background: is-dragged ? root.accent-main.with-alpha(0.25) : (is-hovered ? #2e3442 : #1c2028);
-                                                        border-width: 1px;
-                                                        border-color: is-dragged ? root.accent-main : (is-hovered ? #40495c : #252a35);
-
-                                                        DragGripGlyph {
-                                                            x: (parent.width - self.width) / 2;
-                                                            y: (parent.height - self.height) / 2;
-                                                            icon-color: is-dragged ? root.accent-main : (is-hovered ? #ffffff : #8a92a2);
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                        animate y {
+                                            duration: (SpringTheme.animations-enabled && reorder-list.drop-settling) ? 190ms : 0ms;
+                                            easing: cubic-bezier(0.34, 1.4, 0.64, 1);
                                         }
                                     }
 
@@ -2707,26 +2840,48 @@ export component AppWindow inherits Window {
                                     drag-overlay := TouchArea {
                                         width: 100%;
                                         height: 100%;
-                                        mouse-cursor: reorder-list.dragging-row >= 0 ? grabbing : (reorder-list.hovered-row >= 0 ? grab : default);
+                                        mouse-cursor: reorder-list.dragging-active ? grabbing : (reorder-list.hovered-row >= 0 ? grab : default);
 
                                         pointer-event(ev) => {
                                             if (ev.kind == PointerEventKind.down && root.monitors.length > 0) {
-                                                reorder-list.dragging-row = Math.clamp(Math.floor(self.pressed-y / 78px), 0, root.monitors.length - 1);
+                                                // Se un rilascio precedente sta ancora animando lo snap, consolida subito prima del nuovo drag
+                                                if (reorder-list.drop-settling) {
+                                                    settle-timer.running = false;
+                                                    reorder-list.suppress-slot-anim = true;
+                                                    if (reorder-list.dragging-row >= 0 && reorder-list.target-row >= 0 && reorder-list.dragging-row != reorder-list.target-row) {
+                                                        root.move-monitor(reorder-list.dragging-row, reorder-list.target-row);
+                                                    }
+                                                    reorder-list.dragging-row = -1;
+                                                    reorder-list.target-row = -1;
+                                                    reorder-list.drop-settling = false;
+                                                    reorder-list.suppress-slot-anim = false;
+                                                }
+                                                let picked = Math.clamp(Math.floor(self.pressed-y / 78px), 0, root.monitors.length - 1);
+                                                reorder-list.grab-offset-y = Math.clamp(self.pressed-y - picked * 78px, 6px, 62px);
+                                                reorder-list.drag-y = picked * 78px;
+                                                reorder-list.dragging-row = picked;
+                                                reorder-list.target-row = picked;
+                                                reorder-list.dragging-active = true;
+                                                reorder-list.drop-settling = false;
                                             } else if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
-                                                reorder-list.dragging-row = -1;
+                                                if (reorder-list.dragging-active) {
+                                                    reorder-list.drop-settling = true;
+                                                    reorder-list.dragging-active = false;
+                                                    settle-timer.running = true;
+                                                }
                                             }
                                         }
 
                                         moved => {
-                                            if (self.pressed && reorder-list.dragging-row >= 0 && root.monitors.length > 1) {
-                                                let target-row = Math.clamp(Math.floor(self.mouse-y / 78px), 0, root.monitors.length - 1);
-                                                if (target-row > reorder-list.dragging-row) {
-                                                    root.move-monitor(reorder-list.dragging-row, 1);
-                                                    reorder-list.dragging-row += 1;
-                                                } else if (target-row < reorder-list.dragging-row) {
-                                                    root.move-monitor(reorder-list.dragging-row, -1);
-                                                    reorder-list.dragging-row -= 1;
-                                                }
+                                            if (self.pressed && reorder-list.dragging-active && root.monitors.length > 1) {
+                                                let max-y = Math.max(0px, (root.monitors.length - 1) * 78px);
+                                                let next-y = Math.clamp(self.mouse-y - reorder-list.grab-offset-y, -6px, max-y + 6px);
+                                                reorder-list.drag-y = next-y;
+                                                reorder-list.target-row = Math.clamp(
+                                                    Math.floor((next-y + 34px) / 78px),
+                                                    0,
+                                                    root.monitors.length - 1
+                                                );
                                             }
                                         }
                                     }
@@ -2895,42 +3050,6 @@ export component AppWindow inherits Window {
                                                 swatch-color: #ffab00;
                                                 glow-style: root.glow-style;
                                                 clicked => { root.accent-palette = "amber"; root.save-settings(); }
-                                            }
-                                        }
-
-                                        // Intensità Bagliore Neon
-                                        Text {
-                                            text: root.is-en ? "Active Border & Slider Glow Intensity" : "Intensità Bagliore (Bordi & Cursori)";
-                                            color: #9da5b4;
-                                            font-size: 12px;
-                                            font-weight: 600;
-                                        }
-
-                                        HorizontalLayout {
-                                            spacing: 10px;
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: root.is-en ? "Minimal / Off" : "Disattivato / Minimal";
-                                                active: root.glow-style == "none";
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.glow-style = "none"; root.save-settings(); }
-                                            }
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: root.is-en ? "Subtle (Default)" : "Sottile (Predefinito)";
-                                                active: root.glow-style == "subtle";
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.glow-style = "subtle"; root.save-settings(); }
-                                            }
-                                            TitaniumChip {
-                                                horizontal-stretch: 1;
-                                                text: root.is-en ? "Intense Gaming" : "Intenso (Gaming)";
-                                                active: root.glow-style == "intense";
-                                                accent: root.accent-main;
-                                                glow-style: root.glow-style;
-                                                clicked => { root.glow-style = "intense"; root.save-settings(); }
                                             }
                                         }
 
@@ -3168,7 +3287,7 @@ export component AppWindow inherits Window {
                                                 alignment: center;
                                                 Text {
                                                     text: root.update-status-text;
-                                                    color: #e9edf5;
+                                                    color: root.update-failed ? #ffb4a8 : #e9edf5;
                                                     font-size: 13px;
                                                     font-weight: 600;
                                                 }
@@ -3184,23 +3303,90 @@ export component AppWindow inherits Window {
                                                 alignment: center;
 
                                                 TitaniumChip {
-                                                    text: root.is-en ? "Check Updates" : "Verifica Aggiornamenti";
+                                                    text: root.update-downloading
+                                                        ? (root.is-en ? "Cancel" : "Annulla")
+                                                        : (root.update-checking
+                                                            ? (root.is-en ? "Checking..." : "Verifica...")
+                                                            : (root.is-en ? "Check Updates" : "Verifica Aggiornamenti"));
                                                     accent: root.accent-main;
                                                     glow-style: root.glow-style;
-                                                    clicked => { root.check-updates(); }
+                                                    subtle-danger: root.update-downloading;
+                                                    enabled: root.update-downloading || (!root.update-checking && !root.update-installing);
+                                                    clicked => {
+                                                        if root.update-downloading {
+                                                            root.cancel-update();
+                                                        } else {
+                                                            root.check-updates();
+                                                        }
+                                                    }
                                                 }
-                                                if root.update-available : TitaniumChip {
-                                                    text: root.is-en ? "Update Now" : "Aggiorna Ora";
+                                                if root.update-available || root.update-downloading || root.update-installing : TitaniumChip {
+                                                    text: root.update-installing
+                                                        ? (root.is-en ? "Installing..." : "Installazione...")
+                                                        : (root.update-downloading
+                                                            ? (root.update-indeterminate
+                                                                ? (root.is-en ? "Downloading..." : "Download...")
+                                                                : (root.is-en ? "Download \{Math.round(root.update-progress * 100)}%..." : "Download \{Math.round(root.update-progress * 100)}%..."))
+                                                            : (root.update-failed
+                                                                ? (root.is-en ? "Retry Update" : "Riprova Aggiornamento")
+                                                                : (root.is-en ? "Update Now" : "Aggiorna Ora")));
                                                     active: true;
+                                                    enabled: !root.update-downloading && !root.update-installing;
                                                     accent: root.accent-main;
                                                     glow-style: root.glow-style;
                                                     clicked => { root.install-update(); }
                                                 }
                                                 TitaniumChip {
                                                     text: root.is-en ? "Quit App" : "Esci Completamente";
+                                                    enabled: !root.update-installing;
                                                     accent: root.accent-main;
                                                     glow-style: root.glow-style;
                                                     clicked => { root.quit-app(); }
+                                                }
+                                            }
+                                        }
+
+                                        if root.update-downloading || root.update-installing : VerticalLayout {
+                                            spacing: 6px;
+                                            HorizontalLayout {
+                                                alignment: space-between;
+                                                Text {
+                                                    text: root.update-progress-phase;
+                                                    color: #dce1eb;
+                                                    font-size: 11px;
+                                                    font-weight: 600;
+                                                }
+                                                Text {
+                                                    text: root.update-progress-detail;
+                                                    color: #9da5b4;
+                                                    font-size: 11px;
+                                                }
+                                            }
+                                            Rectangle {
+                                                height: 6px;
+                                                border-radius: 3px;
+                                                background: #1a1e26;
+                                                border-width: 1px;
+                                                border-color: #2e3442;
+                                                clip: true;
+
+                                                Rectangle {
+                                                    y: 0px;
+                                                    height: parent.height;
+                                                    border-radius: 3px;
+                                                    x: root.update-installing
+                                                        ? 0px
+                                                        : (root.update-indeterminate ? parent.width * 0.275 : 0px);
+                                                    width: root.update-installing
+                                                        ? parent.width
+                                                        : (root.update-indeterminate
+                                                            ? parent.width * 0.45
+                                                            : parent.width * Math.clamp(root.update-progress, 0.0, 1.0));
+                                                    background: root.accent-main;
+                                                    animate width {
+                                                        duration: SpringTheme.animations-enabled ? 160ms : 0ms;
+                                                        easing: ease-out;
+                                                    }
                                                 }
                                             }
                                         }
@@ -3218,10 +3404,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.13 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
+// FINESTRA INSTALLER SETUP v1.14 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.13";
+    title: "Installazione Monitor Manager v1.14";
     preferred-width: 520px;
     preferred-height: 410px;
     background: transparent;
@@ -3232,7 +3418,7 @@ export component SetupWindow inherits Window {
     in-out property <bool> opt-launch: true;
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.13 (Dark Matte Titanium & Acrylic)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.14 (Dark Matte Titanium & Acrylic)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -3265,7 +3451,7 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.13";
+                        text: "Monitor Manager v1.14";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
@@ -3352,7 +3538,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione..." : "Installa v1.13 Ora";
+                    text: root.installing ? "Installazione..." : "Installa v1.14 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;

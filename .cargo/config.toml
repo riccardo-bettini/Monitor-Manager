@@ -1,0 +1,5 @@
+[term]
+color = "never"
+
+[term.progress]
+when = "never"

@@ -262,9 +262,153 @@ fn set_window_acrylic(hwnd_opt: Option<windows_sys::Win32::Foundation::HWND>, en
     }
 }
 
+fn hit_test_resize_border(
+    x: i32,
+    y: i32,
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+    edge: i32,
+    corner: i32,
+) -> Option<u32> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT,
+    };
+
+    if x < left || x >= right || y < top || y >= bottom {
+        return None;
+    }
+
+    let on_left_edge = x < left + edge;
+    let on_right_edge = x >= right - edge;
+    let on_top_edge = y < top + edge;
+    let on_bottom_edge = y >= bottom - edge;
+
+    if (x < left + corner && on_top_edge) || (y < top + corner && on_left_edge) {
+        return Some(HTTOPLEFT);
+    }
+    if (x >= right - corner && on_top_edge) || (y < top + corner && on_right_edge) {
+        return Some(HTTOPRIGHT);
+    }
+    if (x < left + corner && on_bottom_edge) || (y >= bottom - corner && on_left_edge) {
+        return Some(HTBOTTOMLEFT);
+    }
+    if (x >= right - corner && on_bottom_edge) || (y >= bottom - corner && on_right_edge) {
+        return Some(HTBOTTOMRIGHT);
+    }
+
+    if on_left_edge {
+        return Some(HTLEFT);
+    }
+    if on_right_edge {
+        return Some(HTRIGHT);
+    }
+    if on_top_edge {
+        return Some(HTTOP);
+    }
+    if on_bottom_edge {
+        return Some(HTBOTTOM);
+    }
+    None
+}
+
+fn install_borderless_resize_subclass(hwnd: windows_sys::Win32::Foundation::HWND) {
+    use std::sync::atomic::{AtomicIsize, Ordering};
+    use windows_sys::Win32::Foundation::{LPARAM, LRESULT, RECT, WPARAM};
+    use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CallWindowProcW, DefWindowProcW, GetWindowRect, IsZoomed, SetWindowLongPtrW, GWLP_WNDPROC,
+        WM_NCHITTEST, WNDPROC,
+    };
+
+    static PREV_WNDPROC: AtomicIsize = AtomicIsize::new(0);
+    static SUBCLASSED_HWND: AtomicIsize = AtomicIsize::new(0);
+
+    unsafe extern "system" fn resize_wnd_proc(
+        hwnd: windows_sys::Win32::Foundation::HWND,
+        msg: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        let prev = PREV_WNDPROC.load(Ordering::Acquire);
+        let prev_proc: WNDPROC = if prev != 0 {
+            Some(std::mem::transmute::<
+                isize,
+                unsafe extern "system" fn(
+                    windows_sys::Win32::Foundation::HWND,
+                    u32,
+                    WPARAM,
+                    LPARAM,
+                ) -> LRESULT,
+            >(prev))
+        } else {
+            None
+        };
+
+        if msg == WM_NCHITTEST && IsZoomed(hwnd) == 0 {
+            let ret = if let Some(f) = prev_proc {
+                CallWindowProcW(Some(f), hwnd, msg, wparam, lparam)
+            } else {
+                DefWindowProcW(hwnd, msg, wparam, lparam)
+            };
+
+            // Intercetta solo se Winit/DefWindowProc risponde HTCLIENT o HTNOWHERE
+            if ret == 1 || ret == 0 {
+                let mut rect = RECT {
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                };
+                if GetWindowRect(hwnd, &mut rect) != 0 {
+                    let x = (lparam as u32 & 0xFFFF) as i16 as i32;
+                    let y = ((lparam as u32 >> 16) & 0xFFFF) as i16 as i32;
+                    let dpi = GetDpiForWindow(hwnd).max(96) as i32;
+                    let edge = ((6 * dpi + 48) / 96).max(5);
+                    let corner = ((12 * dpi + 48) / 96).max(10);
+                    if let Some(ht) = hit_test_resize_border(
+                        x,
+                        y,
+                        rect.left,
+                        rect.top,
+                        rect.right,
+                        rect.bottom,
+                        edge,
+                        corner,
+                    ) {
+                        return ht as LRESULT;
+                    }
+                }
+            }
+            return ret;
+        }
+
+        if let Some(f) = prev_proc {
+            CallWindowProcW(Some(f), hwnd, msg, wparam, lparam)
+        } else {
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+    }
+
+    let hwnd_val = hwnd as isize;
+    if hwnd_val == 0 || SUBCLASSED_HWND.load(Ordering::Acquire) == hwnd_val {
+        return;
+    }
+
+    unsafe {
+        let prev = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, resize_wnd_proc as isize);
+        if prev != 0 && prev != (resize_wnd_proc as isize) {
+            PREV_WNDPROC.store(prev, Ordering::Release);
+            SUBCLASSED_HWND.store(hwnd_val, Ordering::Release);
+        }
+    }
+}
+
 fn show_and_focus_window(ui: &AppWindow, acrylic: bool) {
     let _ = ui.show();
     if let Some(hwnd) = get_slint_hwnd(ui) {
+        install_borderless_resize_subclass(hwnd);
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE, SW_SHOW,
         };
@@ -469,7 +613,12 @@ fn main() {
     let start_minimized = env::args().any(|a| a == "--minimized");
     let settings_state = Arc::new(Mutex::new(AppSettings::load()));
     let ddc_engine = Arc::new(DdcEngine::new());
-    let latest_download_url: Arc<Mutex<Option<(Option<String>, String)>>> =
+    let latest_download_url: Arc<Mutex<Option<(Option<String>, String, u64)>>> =
+        Arc::new(Mutex::new(None));
+    let update_checking = Arc::new(AtomicBool::new(false));
+    let update_downloading = Arc::new(AtomicBool::new(false));
+    let update_cancel_flag = Arc::new(AtomicBool::new(false));
+    let restart_after_exit: Arc<Mutex<Option<std::path::PathBuf>>> =
         Arc::new(Mutex::new(None));
 
     let ui = AppWindow::new().expect("Impossibile inizializzare la finestra nativa Slint");
@@ -847,48 +996,55 @@ fn main() {
         });
     });
 
-    // Callback: Riordina Monitor (Su / Giù) con mutazione in-place per Drag continuo senza interruzioni
+    // Callback: Riordina Monitor da from_idx a to_idx con aggiornamento in-place dopo lo snap animato
     let ddc_move = Arc::clone(&ddc_engine);
     let settings_move = Arc::clone(&settings_state);
     let ui_weak_move = ui.as_weak();
-    ui.on_move_monitor(move |idx, dir| {
-        let idx = idx as usize;
+    ui.on_move_monitor(move |from_idx, to_idx| {
+        if from_idx < 0 || to_idx < 0 || from_idx == to_idx {
+            return;
+        }
+        let from_u = from_idx as usize;
+        let to_u = to_idx as usize;
         let ddc_c = Arc::clone(&ddc_move);
         let settings_c = Arc::clone(&settings_move);
         let uw = ui_weak_move.clone();
 
         let max_len = ddc_c.monitor_count();
-        let new_idx = if dir < 0 {
-            if idx > 0 { idx - 1 } else { return; }
-        } else if idx + 1 < max_len {
-            idx + 1
-        } else {
+        if from_u >= max_len || to_u >= max_len {
             return;
-        };
+        }
 
-        let updated = ddc_c.reorder_monitors(idx, new_idx);
+        let updated = ddc_c.reorder_monitors(from_u, to_u);
         let order: Vec<String> = updated
             .iter()
             .map(|m| format!("{} {}", m.brand, m.name))
             .collect();
-        {
+        thread::spawn(move || {
             let mut s = settings_c.lock().unwrap();
             s.monitor_order = order;
             let _ = s.save();
-        }
+        });
 
-        let _ = slint::invoke_from_event_loop(move || {
-            if let Some(u) = uw.upgrade() {
-                let monitors_rc = u.get_monitors();
+        if let Some(u) = uw.upgrade() {
+            let monitors_rc = u.get_monitors();
+            let count = monitors_rc.row_count();
+            if from_u < count && to_u < count {
                 let prev_sel_id = monitors_rc
                     .row_data(u.get_selected_monitor_index().max(0) as usize)
                     .map(|r| r.id);
 
-                if let (Some(a), Some(b)) =
-                    (monitors_rc.row_data(idx), monitors_rc.row_data(new_idx))
-                {
-                    monitors_rc.set_row_data(idx, b);
-                    monitors_rc.set_row_data(new_idx, a);
+                let lo = from_u.min(to_u);
+                let hi = from_u.max(to_u);
+                let mut rows: Vec<UiMonitor> = (lo..=hi)
+                    .filter_map(|i| monitors_rc.row_data(i))
+                    .collect();
+                if rows.len() == hi - lo + 1 {
+                    let picked = rows.remove(from_u - lo);
+                    rows.insert(to_u - lo, picked);
+                    for (offset, item) in rows.into_iter().enumerate() {
+                        monitors_rc.set_row_data(lo + offset, item);
+                    }
                 }
 
                 if let Some(sel_id) = prev_sel_id {
@@ -901,7 +1057,7 @@ fn main() {
                 }
                 u.invoke_sync_current_values();
             }
-        });
+        }
     });
 
     // Callback: Salvataggio Impostazioni (Zero RAM Overhead)
@@ -941,19 +1097,37 @@ fn main() {
     // Callback: Verifica Aggiornamenti GitHub
     let ui_weak_upd = ui.as_weak();
     let dl_store_upd = Arc::clone(&latest_download_url);
+    let chk_busy = Arc::clone(&update_checking);
+    let dl_busy_chk = Arc::clone(&update_downloading);
     ui.on_check_updates(move || {
+        if chk_busy.load(Ordering::SeqCst) || dl_busy_chk.load(Ordering::SeqCst) {
+            return;
+        }
+        chk_busy.store(true, Ordering::SeqCst);
         if let Some(u) = ui_weak_upd.upgrade() {
-            u.set_update_status_text(SharedString::from(
-                "Verifica release su GitHub in corso...",
-            ));
+            let is_en = u.get_lang() == "en";
+            u.set_update_checking(true);
+            u.set_update_failed(false);
+            u.set_update_status_text(SharedString::from(if is_en {
+                "Checking GitHub releases..."
+            } else {
+                "Verifica release su GitHub in corso..."
+            }));
         }
         let uw = ui_weak_upd.clone();
         let dl_s = Arc::clone(&dl_store_upd);
+        let chk_flag = Arc::clone(&chk_busy);
         thread::spawn(move || {
             let res = updater::check_for_updates();
-            *dl_s.lock().unwrap() = Some((res.download_url.clone(), res.html_url.clone()));
+            *dl_s.lock().unwrap() = Some((
+                res.download_url.clone(),
+                res.html_url.clone(),
+                res.download_size,
+            ));
+            chk_flag.store(false, Ordering::SeqCst);
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(u) = uw.upgrade() {
+                    u.set_update_checking(false);
                     u.set_update_available(res.update_available);
                     u.set_latest_version(SharedString::from(res.latest_version.as_str()));
                     u.set_update_status_text(SharedString::from(res.status_message.as_str()));
@@ -962,33 +1136,182 @@ fn main() {
         });
     });
 
+    // Callback: Annulla Download Aggiornamento
+    let cancel_flag_cb = Arc::clone(&update_cancel_flag);
+    let ui_weak_cancel = ui.as_weak();
+    ui.on_cancel_update(move || {
+        cancel_flag_cb.store(true, Ordering::SeqCst);
+        if let Some(u) = ui_weak_cancel.upgrade() {
+            let is_en = u.get_lang() == "en";
+            u.set_update_progress_phase(SharedString::from(if is_en {
+                "Canceling download..."
+            } else {
+                "Annullamento download..."
+            }));
+        }
+    });
+
     // Callback: Installa Aggiornamento
     let dl_store_inst = Arc::clone(&latest_download_url);
     let ui_weak_inst = ui.as_weak();
+    let dl_busy_inst = Arc::clone(&update_downloading);
+    let chk_busy_inst = Arc::clone(&update_checking);
+    let cancel_flag_inst = Arc::clone(&update_cancel_flag);
+    let restart_store_inst = Arc::clone(&restart_after_exit);
+    let sd_upd = Arc::clone(&shutting_down);
     ui.on_install_update(move || {
+        if dl_busy_inst.load(Ordering::SeqCst) || chk_busy_inst.load(Ordering::SeqCst) {
+            return;
+        }
         let info = dl_store_inst.lock().unwrap().clone();
-        if let Some((download_url, html_url)) = info {
-            if let Some(u) = ui_weak_inst.upgrade() {
-                u.set_update_status_text(SharedString::from(
-                    "Download e installazione nuova versione in corso...",
-                ));
-            }
-            let uw = ui_weak_inst.clone();
-            thread::spawn(move || {
-                if let Some(url) = download_url {
-                    if let Err(err) = updater::perform_self_update(&url) {
-                        let _ = slint::invoke_from_event_loop(move || {
-                            if let Some(u) = uw.upgrade() {
-                                u.set_update_status_text(SharedString::from(err.as_str()));
-                            }
-                        });
-                    }
+        if let Some((download_url, html_url, expected_size)) = info {
+            if let Some(url) = download_url {
+                dl_busy_inst.store(true, Ordering::SeqCst);
+                cancel_flag_inst.store(false, Ordering::SeqCst);
+
+                let target_ver = if let Some(u) = ui_weak_inst.upgrade() {
+                    let en = u.get_lang() == "en";
+                    let ver = u.get_latest_version().to_string();
+                    u.set_update_downloading(true);
+                    u.set_update_installing(false);
+                    u.set_update_failed(false);
+                    u.set_update_progress(0.0);
+                    u.set_update_indeterminate(expected_size == 0);
+                    u.set_update_progress_phase(SharedString::from(if en {
+                        format!("Downloading v{}...", ver)
+                    } else {
+                        format!("Download v{}...", ver)
+                    }));
+                    u.set_update_progress_detail(SharedString::from(
+                        updater::format_progress_detail(0, expected_size),
+                    ));
+                    u.set_update_status_text(SharedString::from(if en {
+                        format!("Downloading Monitor Manager v{}...", ver)
+                    } else {
+                        format!("Download Monitor Manager v{} in corso...", ver)
+                    }));
+                    ver
                 } else {
-                    let _ = std::process::Command::new("cmd")
-                        .args(["/C", "start", "", &html_url])
-                        .spawn();
-                }
-            });
+                    String::new()
+                };
+
+                let uw = ui_weak_inst.clone();
+                let dl_busy_done = Arc::clone(&dl_busy_inst);
+                let cancel_flag_bg = Arc::clone(&cancel_flag_inst);
+                let restart_bg = Arc::clone(&restart_store_inst);
+                let sd_bg = Arc::clone(&sd_upd);
+
+                thread::spawn(move || {
+                    let uw_prog = uw.clone();
+                    let ver_prog = target_ver.clone();
+                    let result = updater::perform_self_update_with_progress(
+                        &url,
+                        expected_size,
+                        &cancel_flag_bg,
+                        move |prog| {
+                            let uw_ui = uw_prog.clone();
+                            let ver_str = ver_prog.clone();
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(u) = uw_ui.upgrade() {
+                                    let en = u.get_lang() == "en";
+                                    match prog.phase {
+                                        updater::UpdatePhase::Downloading => {
+                                            u.set_update_downloading(true);
+                                            u.set_update_installing(false);
+                                            u.set_update_indeterminate(prog.total_bytes == 0);
+                                            u.set_update_progress(prog.fraction);
+                                            u.set_update_progress_phase(SharedString::from(
+                                                if en {
+                                                    format!("Downloading v{}...", ver_str)
+                                                } else {
+                                                    format!("Download v{}...", ver_str)
+                                                },
+                                            ));
+                                            u.set_update_progress_detail(SharedString::from(
+                                                updater::format_progress_detail(
+                                                    prog.downloaded_bytes,
+                                                    prog.total_bytes,
+                                                ),
+                                            ));
+                                        }
+                                        updater::UpdatePhase::Installing => {
+                                            u.set_update_downloading(false);
+                                            u.set_update_installing(true);
+                                            u.set_update_indeterminate(false);
+                                            u.set_update_progress(1.0);
+                                            u.set_update_progress_phase(SharedString::from(
+                                                if en {
+                                                    "Launching installer...".to_string()
+                                                } else {
+                                                    "Installazione in corso...".to_string()
+                                                },
+                                            ));
+                                            u.set_update_progress_detail(SharedString::from(
+                                                updater::format_progress_detail(
+                                                    prog.downloaded_bytes,
+                                                    prog.total_bytes,
+                                                ),
+                                            ));
+                                            u.set_update_status_text(SharedString::from(if en {
+                                                format!("Installing v{}...", ver_str)
+                                            } else {
+                                                format!("Installazione v{} in corso...", ver_str)
+                                            }));
+                                        }
+                                    }
+                                }
+                            });
+                        },
+                    );
+
+                    match result {
+                        Ok(target_exe) => {
+                            *restart_bg.lock().unwrap() = Some(target_exe);
+                            sd_bg.store(true, Ordering::SeqCst);
+                            let _ = slint::invoke_from_event_loop(move || {
+                                drop_tray_icon();
+                                let _ = slint::quit_event_loop();
+                            });
+                        }
+                        Err(err) => {
+                            dl_busy_done.store(false, Ordering::SeqCst);
+                            let cancelled = err.contains("annullato") || err.contains("canceled");
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(u) = uw.upgrade() {
+                                    let en = u.get_lang() == "en";
+                                    u.set_update_downloading(false);
+                                    u.set_update_installing(false);
+                                    u.set_update_indeterminate(false);
+                                    u.set_update_progress(0.0);
+                                    u.set_update_progress_phase(SharedString::from(""));
+                                    u.set_update_progress_detail(SharedString::from(""));
+                                    if cancelled {
+                                        u.set_update_failed(false);
+                                        u.set_update_status_text(SharedString::from(if en {
+                                            format!(
+                                                "Download canceled. Update v{} ready to retry.",
+                                                u.get_latest_version()
+                                            )
+                                        } else {
+                                            format!(
+                                                "Download annullato. Aggiornamento v{} pronto.",
+                                                u.get_latest_version()
+                                            )
+                                        }));
+                                    } else {
+                                        u.set_update_failed(true);
+                                        u.set_update_status_text(SharedString::from(err.as_str()));
+                                    }
+                                }
+                            });
+                        }
+                    }
+                });
+            } else {
+                let _ = std::process::Command::new("cmd")
+                    .args(["/C", "start", "", &html_url])
+                    .spawn();
+            }
         }
     });
 
@@ -1021,7 +1344,11 @@ fn main() {
 
             if auto_upd {
                 let res = updater::check_for_updates();
-                *dl_init.lock().unwrap() = Some((res.download_url.clone(), res.html_url.clone()));
+                *dl_init.lock().unwrap() = Some((
+                    res.download_url.clone(),
+                    res.html_url.clone(),
+                    res.download_size,
+                ));
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(u) = uw_init.upgrade() {
                         u.set_update_available(res.update_available);
@@ -1062,5 +1389,42 @@ fn main() {
         if !instance_mutex.is_null() {
             let _ = CloseHandle(instance_mutex);
         }
+    }
+
+    let target_exe = restart_after_exit.lock().unwrap().take();
+    if let Some(target_exe) = target_exe {
+        let _ = std::process::Command::new(target_exe).spawn();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hit_test_resize_border;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT,
+    };
+
+    #[test]
+    fn border_hit_test_covers_edges_corners_and_negative_monitors() {
+        // Finestra su monitor secondario a sinistra (coordinate X negative)
+        let (l, t, r, b) = (-1000, 100, -20, 700);
+        let (edge, corner) = (6, 12);
+
+        assert_eq!(hit_test_resize_border(-1000, 100, l, t, r, b, edge, corner), Some(HTTOPLEFT));
+        assert_eq!(hit_test_resize_border(-990, 103, l, t, r, b, edge, corner), Some(HTTOPLEFT));
+        assert_eq!(hit_test_resize_border(-21, 102, l, t, r, b, edge, corner), Some(HTTOPRIGHT));
+        assert_eq!(hit_test_resize_border(-998, 697, l, t, r, b, edge, corner), Some(HTBOTTOMLEFT));
+        assert_eq!(hit_test_resize_border(-24, 695, l, t, r, b, edge, corner), Some(HTBOTTOMRIGHT));
+
+        assert_eq!(hit_test_resize_border(-999, 400, l, t, r, b, edge, corner), Some(HTLEFT));
+        assert_eq!(hit_test_resize_border(-22, 400, l, t, r, b, edge, corner), Some(HTRIGHT));
+        assert_eq!(hit_test_resize_border(-500, 102, l, t, r, b, edge, corner), Some(HTTOP));
+        assert_eq!(hit_test_resize_border(-500, 696, l, t, r, b, edge, corner), Some(HTBOTTOM));
+
+        // Area interna e bottoni in alto a destra sotto il bordo (es. X chiudi a 15px dal top)
+        assert_eq!(hit_test_resize_border(-35, 115, l, t, r, b, edge, corner), None);
+        assert_eq!(hit_test_resize_border(-500, 400, l, t, r, b, edge, corner), None);
+        // Fuori finestra
+        assert_eq!(hit_test_resize_border(-1005, 400, l, t, r, b, edge, corner), None);
     }
 }

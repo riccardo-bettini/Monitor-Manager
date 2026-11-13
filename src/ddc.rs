@@ -207,8 +207,9 @@ impl DdcEngine {
     /// Sposta un monitor nell'ordine personalizzato e restituisce la lista aggiornata
     pub fn reorder_monitors(&self, from_idx: usize, to_idx: usize) -> Vec<MonitorInfo> {
         let mut guard = self.monitors.lock().unwrap();
-        if from_idx < guard.len() && to_idx < guard.len() {
-            guard.swap(from_idx, to_idx);
+        if from_idx < guard.len() && to_idx < guard.len() && from_idx != to_idx {
+            let item = guard.remove(from_idx);
+            guard.insert(to_idx, item);
         }
         guard.iter().map(|m| m.info.clone()).collect()
     }
@@ -738,6 +739,14 @@ mod tests {
         let unchanged = engine.reorder_monitors(0, 99);
         assert_eq!(unchanged[0].id, 2);
         assert_eq!(unchanged[1].id, 1);
+
+        {
+            let mut guard = engine.monitors.lock().unwrap();
+            guard.push(sample_monitor(3, "LG UltraGear", false));
+        }
+        // Sposta #0 (id 2) in coda (#2): deve traslare [1, 3, 2] e non fare semplice swap
+        let shifted = engine.reorder_monitors(0, 2);
+        assert_eq!(shifted.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1, 3, 2]);
     }
 
     #[test]

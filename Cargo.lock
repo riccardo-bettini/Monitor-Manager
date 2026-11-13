@@ -2806,7 +2806,7 @@ dependencies = [
 
 [[package]]
 name = "monitor-manager"
-version = "1.0.13"
+version = "1.0.14"
 dependencies = [
  "raw-window-handle",
  "serde",
