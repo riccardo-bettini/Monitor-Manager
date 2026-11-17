@@ -31,6 +31,7 @@ Questo file definisce le regole operative, il ciclo di vita delle versioni e le 
 ## 3. Qualità del Codice & Prestazioni
 - **Nessun Blocco UI**: Tutte le operazioni di comunicazione hardware (DDC/CI, scansioni I²C/VCP) devono risiedere su thread di background disaccoppiati per garantire che l'interfaccia resti costantemente a 60/120+ FPS.
 - **Binario Leggero**: Mantenere al minimo le dipendenze esterne non necessarie; privilegiare compilazioni ottimizzate native per Windows.
+- **Spazio su Disco Minimo**: Mantenere `debug = 0` in `[profile.dev]` dentro `Cargo.toml` per evitare simboli di debug pesanti. Al termine di ogni ciclo di build o rilascio (dopo aver prodotto ed estratto gli eseguibili finali), eseguire `cargo clean` per rimuovere gli artefatti temporanei in `target/` e occupare solo lo spazio strettamente necessario sul PC.
 
 ---
 

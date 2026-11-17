@@ -118,8 +118,15 @@ pub fn collect_probe_codes(
     let b = brand.to_uppercase();
     let m = model_code.to_uppercase();
     if b.contains("ASUS") || matches!(m.as_str(), "AUS" | "ACI" | "ASU") {
-        // ASUS TUF / ROG: GameVisual (0xDC), VividPixel / Overdrive / Blue Light / Shadow Boost (0xE0..0xF1)
-        for c in [0xE0u8, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE8, 0xEA, 0xEB, 0xEC, 0xED, 0xF0, 0xF1] {
+        // ASUS TUF / ROG: GameVisual (0xDC), Aspect (0x86), VividPixel (0x87), Saturation (0x8A),
+        // Gamma (0x72), e tutti i controlli vendor-specific (0xE0..=0xFF) inclusi ELMB/VRR/ShadowBoost/GamePlus
+        set.insert(0x72);
+        set.insert(0x86);
+        set.insert(0x87);
+        set.insert(0x8A);
+        set.insert(0x8D);
+        set.insert(0xDC);
+        for c in 0xE0u8..=0xFF {
             set.insert(c);
         }
     } else if b.contains("AOC") || m == "AOC" {
@@ -207,10 +214,24 @@ fn friendly_category_and_names(code: u8, brand: &str) -> Option<(&'static str, &
         0xE0..=0xFF => {
             if is_asus {
                 match code {
-                    0xE1 => ("gaming", "ASUS Controllo Custom 0xE1", "ASUS Custom Control 0xE1"),
-                    0xE2 => ("gaming", "ASUS Overdrive / TraceFree", "ASUS Overdrive / TraceFree"),
-                    0xE8 => ("gaming", "ASUS Shadow Boost", "ASUS Shadow Boost"),
-                    0xEA => ("gaming", "ASUS Blue Light Filter", "ASUS Blue Light Filter"),
+                    0xE0 => ("gaming", "ASUS OD Variabile / TraceFree", "ASUS Variable OD / TraceFree"),
+                    0xE1 => ("gaming", "ASUS Potenziamento / Toggle 0xE1", "ASUS Frame / Toggle 0xE1"),
+                    0xE2 => ("gaming", "ASUS TraceFree / Shadow Alt", "ASUS TraceFree / Shadow Alt"),
+                    0xE3 => ("gaming", "ASUS GamePlus Mirino", "ASUS GamePlus Crosshair"),
+                    0xE4 => ("gaming", "ASUS GamePlus Timer", "ASUS GamePlus Timer"),
+                    0xE5 => ("gaming", "ASUS Shadow Boost", "ASUS Shadow Boost"),
+                    0xE6 => ("gaming", "ASUS Filtro Luce Blu", "ASUS Blue Light Filter"),
+                    0xE7 => ("gaming", "ASUS Shadow Boost Dinamico", "ASUS Dynamic Shadow Boost"),
+                    0xE8 => ("gaming", "ASUS GamePlus Contatore FPS", "ASUS GamePlus FPS Counter"),
+                    0xE9 => ("gaming", "ASUS Posizione HUD 0xE9", "ASUS HUD Position 0xE9"),
+                    0xEA => ("color", "ASUS Ricchezza Colore (Gamut)", "ASUS Color Space (Gamut)"),
+                    0xEB => ("gaming", "ASUS GamePlus Allineamento", "ASUS GamePlus Alignment"),
+                    0xEE => ("gaming", "ASUS ELMB / Motion Blur", "ASUS ELMB / Motion Blur"),
+                    0xEF => ("gaming", "ASUS Telemetria OSD 0xEF", "ASUS OSD Telemetry 0xEF"),
+                    0xF0 => ("gaming", "ASUS Freq. Agg. Variabile (VRR)", "ASUS Variable Refresh Rate"),
+                    0xF2 => ("gaming", "ASUS Anti Sfarfallio OLED", "ASUS OLED Anti-Flicker"),
+                    0xFA => ("gaming", "ASUS Posizione GamePlus D-Pad", "ASUS GamePlus D-Pad"),
+                    0xFB => ("gaming", "ASUS GamePlus Stili Extra", "ASUS GamePlus Extra Styles"),
                     _ => return None,
                 }
             } else if is_aoc {
@@ -470,7 +491,7 @@ mod tests {
         assert_eq!(meta_dc.options.len(), 4);
 
         let meta_e8 = describe_vcp(0xE8, "ASUS", &db, None);
-        assert_eq!(meta_e8.name_en, "ASUS Shadow Boost");
+        assert_eq!(meta_e8.name_en, "ASUS GamePlus FPS Counter");
         assert!(is_critical_vcp(0x04));
         assert!(is_critical_vcp(0xD6));
     }

@@ -90,6 +90,8 @@ pub struct MonitorInfo {
     pub mccs_version: String,
     #[serde(default)]
     pub software_lut: SoftwareLutSettings,
+    #[serde(default)]
+    pub asus: crate::asus_vcp::AsusMonitorState,
 }
 
 struct PhysicalHandleWrap(HANDLE);
@@ -119,12 +121,17 @@ impl Drop for ManagedMonitor {
 struct CoalescedQueue {
     /// Mappa (monitor_id, vcp_code) -> valore_piu_recente
     pending: HashMap<(usize, u8), u32>,
+    /// Comandi discreti ordinati che non vanno coalesciti (es. D-Pad GamePlus, Reset)
+    discrete: std::collections::VecDeque<(usize, u8, u32)>,
     shutdown: bool,
 }
+
+type ResyncCallback = Arc<dyn Fn(Vec<MonitorInfo>) + Send + Sync>;
 
 pub struct DdcEngine {
     monitors: Arc<Mutex<Vec<ManagedMonitor>>>,
     queue: Arc<(Mutex<CoalescedQueue>, Condvar)>,
+    on_resync: Arc<Mutex<Option<ResyncCallback>>>,
 }
 
 impl DdcEngine {
@@ -133,42 +140,59 @@ impl DdcEngine {
         let queue = Arc::new((
             Mutex::new(CoalescedQueue {
                 pending: HashMap::new(),
+                discrete: std::collections::VecDeque::new(),
                 shutdown: false,
             }),
             Condvar::new(),
         ));
+        let on_resync = Arc::new(Mutex::new(None));
 
         let engine = Self {
             monitors: Arc::clone(&monitors),
             queue: Arc::clone(&queue),
+            on_resync: Arc::clone(&on_resync),
         };
 
         engine.spawn_worker();
         engine
     }
 
+    pub fn set_resync_callback(&self, cb: ResyncCallback) {
+        if let Ok(mut g) = self.on_resync.lock() {
+            *g = Some(cb);
+        }
+    }
+
     fn spawn_worker(&self) {
         let monitors_ref = Arc::clone(&self.monitors);
         let queue_ref = Arc::clone(&self.queue);
+        let resync_ref = Arc::clone(&self.on_resync);
 
         thread::spawn(move || {
             let mut wmi_session: Option<crate::wmi_brightness::WmiSession> = None;
 
             loop {
-                let next_batch: Vec<((usize, u8), u32)> = {
+                let (next_discrete, next_batch) = {
                     let (lock, cvar) = &*queue_ref;
                     let mut q = lock.lock().unwrap();
-                    while q.pending.is_empty() && !q.shutdown {
+                    while q.pending.is_empty() && q.discrete.is_empty() && !q.shutdown {
                         q = cvar.wait(q).unwrap();
                     }
                     if q.shutdown {
                         return;
                     }
-                    q.pending.drain().collect()
+                    let discrete: Vec<(usize, u8, u32)> = q.discrete.drain(..).collect();
+                    let coalesced: Vec<((usize, u8), u32)> = q.pending.drain().collect();
+                    (discrete, coalesced)
                 };
 
-                for ((monitor_id, vcp_code), value) in next_batch {
-                    // Prendiamo l'handle senza bloccare la UI durante la chiamata I2C o WMI
+                let all_ops = next_discrete
+                    .into_iter()
+                    .chain(next_batch.into_iter().map(|((id, code), val)| (id, code, val)));
+
+                let mut resync_ids: Vec<usize> = Vec::new();
+
+                for (monitor_id, vcp_code, value) in all_ops {
                     let target = {
                         let guard = monitors_ref.lock().unwrap();
                         guard.iter().find(|m| m.info.id == monitor_id).map(|m| {
@@ -176,11 +200,12 @@ impl DdcEngine {
                                 m.handle.0 as isize,
                                 m.info.is_internal_wmi,
                                 m.info.wmi_instance.clone(),
+                                m.info.name.clone(),
                             )
                         })
                     };
 
-                    if let Some((h_int, is_wmi, wmi_instance)) = target {
+                    if let Some((h_int, is_wmi, wmi_instance, mon_name)) = target {
                         if is_wmi {
                             if vcp_code == VCP_BRIGHTNESS {
                                 if wmi_session.is_none() {
@@ -191,9 +216,36 @@ impl DdcEngine {
                                 }
                             }
                         } else if h_int != 0 {
-                            unsafe {
-                                let _ = SetVCPFeature(h_int as HANDLE, vcp_code, value);
+                            let ok = unsafe { SetVCPFeature(h_int as HANDLE, vcp_code, value) != 0 };
+                            if !ok {
+                                write_vcp_ddc_hi_fallback(&mon_name, vcp_code, value);
                             }
+                            if matches!(
+                                vcp_code,
+                                crate::asus_vcp::vcp::GAME_VISUAL
+                                    | crate::asus_vcp::vcp::COLOR_PRESET
+                                    | crate::asus_vcp::vcp::FACTORY_RESET
+                                    | crate::asus_vcp::vcp::COLOR_RESET
+                            ) && !resync_ids.contains(&monitor_id)
+                            {
+                                resync_ids.push(monitor_id);
+                            }
+                        }
+                    }
+                }
+
+                if !resync_ids.is_empty() {
+                    thread::sleep(std::time::Duration::from_millis(140));
+                    for id in resync_ids {
+                        readback_picture_and_asus(&monitors_ref, id);
+                    }
+                    let snapshot = {
+                        let guard = monitors_ref.lock().unwrap();
+                        guard.iter().map(|m| m.info.clone()).collect::<Vec<_>>()
+                    };
+                    if let Ok(cb_guard) = resync_ref.lock() {
+                        if let Some(ref cb) = *cb_guard {
+                            cb(snapshot);
                         }
                     }
                 }
@@ -271,6 +323,29 @@ impl DdcEngine {
         cvar.notify_one();
     }
 
+    /// Invia un comando discreto non coalescito (es. freccia D-Pad GamePlus, Reset) al monitor selezionato
+    pub fn send_discrete_vcp(&self, monitor_id: usize, vcp_code: u8, value: u32) {
+        let valid = {
+            let mut guard = self.monitors.lock().unwrap();
+            if let Some(m) = guard.iter_mut().find(|m| m.info.id == monitor_id) {
+                if !m.info.is_internal_wmi {
+                    update_cached_vcp(&mut m.info, vcp_code, value);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+        if valid {
+            let (lock, cvar) = &*self.queue;
+            let mut q = lock.lock().unwrap();
+            q.discrete.push_back((monitor_id, vcp_code, value));
+            cvar.notify_one();
+        }
+    }
+
     /// Esegue in background la scoperta completa delle Capabilities MCCS e di tutti i VCP supportati.
     pub fn probe_capabilities_for_all(&self) -> Vec<MonitorInfo> {
         let targets: Vec<(usize, isize, String, String, bool)> = {
@@ -334,6 +409,7 @@ impl DdcEngine {
 
                 let probe_codes = collect_probe_codes(caps_opt.as_ref(), &brand, &model_code);
                 let mut discovered_vcps = Vec::new();
+                let mut asus_readings: Vec<(u8, u32, u32, Vec<u16>)> = Vec::new();
 
                 for code in probe_codes {
                     let cap_values = caps_opt
@@ -368,7 +444,11 @@ impl DdcEngine {
                     }
 
                     let vcp = read_vcp(h, code, 100);
+                    let enums: Vec<u16> = cap_values
+                        .map(|m| m.keys().map(|&k| k as u16).collect())
+                        .unwrap_or_default();
                     if vcp.supported {
+                        asus_readings.push((code, vcp.current, vcp.max.max(1), enums.clone()));
                         let meta = describe_vcp(code, &brand, &db, cap_values);
                         discovered_vcps.push(DiscoveredVcp {
                             code,
@@ -383,6 +463,9 @@ impl DdcEngine {
                             from_capabilities: declared_in_caps,
                             options: meta.options,
                         });
+                    } else if declared_in_caps && code >= 0xE0 {
+                        // Preserva eventuali VCP ASUS write-only dichiarati nella capability string (es. 0xFA D-pad, 0xE8/0xEB)
+                        asus_readings.push((code, 0, enums.iter().copied().max().unwrap_or(1) as u32, enums));
                     }
                 }
 
@@ -397,7 +480,7 @@ impl DdcEngine {
                     (cat_rank, v.code)
                 });
 
-                (id, raw_caps, mccs_ver, discovered_vcps)
+                (id, raw_caps, mccs_ver, discovered_vcps, asus_readings)
             }));
         }
 
@@ -409,14 +492,20 @@ impl DdcEngine {
         }
 
         let mut guard = self.monitors.lock().unwrap();
-        for (id, raw_caps, mccs_ver, vcps) in results {
+        for (id, raw_caps, mccs_ver, vcps, asus_readings) in results {
             if let Some(m) = guard.iter_mut().find(|m| m.info.id == id) {
                 if !vcps.is_empty() {
                     m.info.ddc_supported = true;
                 }
-                m.info.capabilities_raw = raw_caps;
+                m.info.capabilities_raw = raw_caps.clone();
                 m.info.mccs_version = mccs_ver;
                 m.info.discovered_vcps = vcps;
+                m.info.asus = crate::asus_vcp::resolve_asus_state(
+                    &m.info.brand,
+                    &m.info.name,
+                    &raw_caps,
+                    &asus_readings,
+                );
             }
         }
         guard.iter().map(|m| m.info.clone()).collect()
@@ -535,11 +624,43 @@ fn update_cached_vcp(info: &mut MonitorInfo, vcp_code: u8, value: u32) {
             };
         }
     }
+    match vcp_code {
+        crate::asus_vcp::vcp::GAME_VISUAL => {
+            info.asus.gamevisual_mode =
+                crate::asus_vcp::GameVisualMode::from_vcp_value(value) as i32;
+        }
+        crate::asus_vcp::vcp::VARIABLE_OD => info.asus.variable_od = value,
+        crate::asus_vcp::vcp::BLUE_LIGHT_FILTER => info.asus.blue_light_filter = value,
+        crate::asus_vcp::vcp::ELMB => info.asus.elmb = value,
+        crate::asus_vcp::vcp::OLED_ANTI_FLICKER => info.asus.oled_anti_flicker = value,
+        crate::asus_vcp::vcp::SHADOW_BOOST | crate::asus_vcp::vcp::SHADOW_BOOST_ALT => {
+            if vcp_code == info.asus.shadow_boost_vcp {
+                info.asus.shadow_boost = value;
+            }
+        }
+        crate::asus_vcp::vcp::DYNAMIC_SHADOW_BOOST => {
+            info.asus.dynamic_shadow_boost = value > 0;
+        }
+        crate::asus_vcp::vcp::FRAME_RATE_BOOST => {
+            info.asus.frame_rate_boost = value > 0;
+        }
+        crate::asus_vcp::vcp::VRR_ENABLE => info.asus.vrr_enabled = value > 0,
+        crate::asus_vcp::vcp::ASPECT_CONTROL => info.asus.aspect_control = value,
+        crate::asus_vcp::vcp::COLOR_SPACE => info.asus.color_space = value,
+        crate::asus_vcp::vcp::GAMEPLUS_CROSSHAIR => {
+            info.asus.crosshair_style = info.asus.crosshair_vcp_to_ui(value);
+        }
+        crate::asus_vcp::vcp::GAMEPLUS_TIMER => info.asus.timer_preset = value,
+        _ => {}
+    }
     let feature = match vcp_code {
         VCP_BRIGHTNESS => &mut info.brightness,
         VCP_CONTRAST => &mut info.contrast,
         VCP_SATURATION => &mut info.saturation,
-        VCP_SHARPNESS => &mut info.sharpness,
+        VCP_SHARPNESS => {
+            info.asus.vivid_pixel = value;
+            &mut info.sharpness
+        }
         VCP_RED_GAIN => &mut info.red_gain,
         VCP_GREEN_GAIN => &mut info.green_gain,
         VCP_BLUE_GAIN => &mut info.blue_gain,
@@ -549,6 +670,81 @@ fn update_cached_vcp(info: &mut MonitorInfo, vcp_code: u8, value: u32) {
         _ => return,
     };
     feature.current = value.min(feature.max.max(1));
+}
+
+fn write_vcp_ddc_hi_fallback(mon_name: &str, vcp_code: u8, value: u32) {
+    use ddc::Ddc;
+    let needle = mon_name.to_uppercase();
+    for mut d in ddc_hi::Display::enumerate() {
+        let model = d
+            .info
+            .model_name
+            .as_deref()
+            .unwrap_or("")
+            .to_uppercase();
+        if needle.contains(&model) || model.is_empty() {
+            if d.handle.set_vcp_feature(vcp_code, value as u16).is_ok() {
+                break;
+            }
+        }
+    }
+}
+
+fn readback_picture_and_asus(monitors_ref: &Arc<Mutex<Vec<ManagedMonitor>>>, monitor_id: usize) {
+    let h_int = {
+        let guard = monitors_ref.lock().unwrap();
+        guard
+            .iter()
+            .find(|m| m.info.id == monitor_id)
+            .map(|m| m.handle.0 as isize)
+            .unwrap_or(0)
+    };
+    if h_int == 0 {
+        return;
+    }
+    let h = h_int as HANDLE;
+    let codes = [
+        VCP_BRIGHTNESS,
+        VCP_CONTRAST,
+        VCP_COLOR_TEMP,
+        VCP_RED_GAIN,
+        VCP_GREEN_GAIN,
+        VCP_BLUE_GAIN,
+        VCP_SHARPNESS,
+        VCP_SATURATION,
+        VCP_VOLUME,
+        VCP_INPUT_SOURCE,
+        crate::asus_vcp::vcp::ASPECT_CONTROL,
+        crate::asus_vcp::vcp::GAME_VISUAL,
+        crate::asus_vcp::vcp::VARIABLE_OD,
+        crate::asus_vcp::vcp::FRAME_RATE_BOOST,
+        crate::asus_vcp::vcp::SHADOW_BOOST_ALT,
+        crate::asus_vcp::vcp::GAMEPLUS_CROSSHAIR,
+        crate::asus_vcp::vcp::GAMEPLUS_TIMER,
+        crate::asus_vcp::vcp::SHADOW_BOOST,
+        crate::asus_vcp::vcp::BLUE_LIGHT_FILTER,
+        crate::asus_vcp::vcp::DYNAMIC_SHADOW_BOOST,
+        crate::asus_vcp::vcp::COLOR_SPACE,
+        crate::asus_vcp::vcp::ELMB,
+        crate::asus_vcp::vcp::VRR_ENABLE,
+        crate::asus_vcp::vcp::OLED_ANTI_FLICKER,
+    ];
+    let mut updates = Vec::new();
+    for code in codes {
+        let v = read_vcp(h, code, 100);
+        if v.supported {
+            updates.push((code, v.current));
+        }
+    }
+    if updates.is_empty() {
+        return;
+    }
+    let mut guard = monitors_ref.lock().unwrap();
+    if let Some(m) = guard.iter_mut().find(|m| m.info.id == monitor_id) {
+        for (code, val) in updates {
+            update_cached_vcp(&mut m.info, code, val);
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -908,6 +1104,7 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
                 capabilities_raw: String::new(),
                 mccs_version: String::new(),
                 software_lut: SoftwareLutSettings::default(),
+                asus: crate::asus_vcp::AsusMonitorState::default(),
             };
 
             (
@@ -1029,6 +1226,7 @@ mod tests {
                 capabilities_raw: String::new(),
                 mccs_version: String::new(),
                 software_lut: SoftwareLutSettings::default(),
+                asus: crate::asus_vcp::AsusMonitorState::default(),
             },
             handle: PhysicalHandleWrap(std::ptr::null_mut()),
         }

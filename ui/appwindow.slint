@@ -1,68 +1,28 @@
 import { ScrollView } from "std-widgets.slint";
+import {
+    UiVcpOption,
+    UiDiscoveredVcp,
+    UiMonitor,
+    UiWindowEntry,
+    UiHotkeyItem,
+    UiAppRule,
+} from "types.slint";
+import {
+    GameVisualView,
+    GamePlusView,
+    MultiScreenView,
+    HotkeysView,
+    AppTweakerView,
+    AiAssistantView,
+} from "dwc_views.slint";
 
-export struct UiVcpOption {
-    value: int,
-    label: string,
-}
-
-export struct UiDiscoveredVcp {
-    code: int,
-    hex-code: string,
-    name-it: string,
-    name-en: string,
-    category: string,
-    is-continuous: bool,
-    current: int,
-    max: int,
-    is-read-only: bool,
-    is-critical: bool,
-    options: [UiVcpOption],
-}
-
-export struct UiMonitor {
-    id: int,
-    name: string,
-    brand: string,
-    resolution: string,
-    is-primary: bool,
-    ddc-supported: bool,
-    is-internal-wmi: bool,
-    brightness: int,
-    brightness-max: int,
-    brightness-sup: bool,
-    contrast: int,
-    contrast-max: int,
-    contrast-sup: bool,
-    sharpness: int,
-    sharpness-max: int,
-    sharpness-sup: bool,
-    saturation: int,
-    saturation-max: int,
-    saturation-sup: bool,
-    red-gain: int,
-    green-gain: int,
-    blue-gain: int,
-    rgb-sup: bool,
-    color-temp: int,
-    color-temp-sup: bool,
-    volume: int,
-    volume-sup: bool,
-    input-source: int,
-    input-sup: bool,
-    current-hz: int,
-    available-hz: [int],
-    hdr-supported: bool,
-    hdr-enabled: bool,
-    mccs-version: string,
-    vcps-probing: bool,
-    discovered-vcps: [UiDiscoveredVcp],
-    sw-lut-enabled: bool,
-    sw-gamma: int,
-    sw-warmth: int,
-    sw-contrast: int,
-    sw-red: int,
-    sw-green: int,
-    sw-blue: int,
+export {
+    UiVcpOption,
+    UiDiscoveredVcp,
+    UiMonitor,
+    UiWindowEntry,
+    UiHotkeyItem,
+    UiAppRule,
 }
 
 // ============================================================================
@@ -1227,10 +1187,47 @@ export component AppWindow inherits Window {
             sw-red: 100,
             sw-green: 100,
             sw-blue: 100,
+            is-asus: true,
+            is-oled: false,
+            dual-mode-sup: false,
+            gamevisual-sup: true,
+            gamevisual-mode: 5,
+            variable-od: 3,
+            variable-od-max: 5,
+            variable-od-sup: true,
+            blue-light: 3,
+            blue-light-max: 4,
+            blue-light-sup: true,
+            vivid-pixel: 50,
+            vivid-pixel-max: 100,
+            vivid-pixel-sup: true,
+            elmb: 1,
+            elmb-max: 2,
+            elmb-sup: true,
+            oled-flicker: 0,
+            oled-flicker-max: 2,
+            shadow-boost: 0,
+            shadow-boost-max: 4,
+            shadow-boost-sup: true,
+            dynamic-shadow-boost: false,
+            dynamic-shadow-boost-sup: true,
+            frame-rate-boost: false,
+            vrr-enabled: true,
+            vrr-sup: true,
+            aspect-control: 2,
+            aspect-control-sup: true,
+            color-space: 0,
+            color-space-sup: true,
+            crosshair-style: 0,
+            timer-preset: 0,
+            fps-counter: false,
+            alignment-grid: false,
+            caps-raw: "",
+            mpu-ver: "",
         }
     ];
     in-out property <int> selected-monitor-index: 0;
-    // "home" | "dashboard" | "profiles" | "reorder" | "settings"
+    // "home" | "dashboard" | "profiles" | "reorder" | "settings" | "gamevisual" | "gameplus" | "multiscreen" | "hotkeys" | "apptweaker" | "ai"
     in-out property <string> active-view: "home";
     // "all" | "gaming" | "image" | "color" | "audio_input" | "system" | "raw"
     in-out property <string> dashboard-vcp-tab: "all";
@@ -1284,10 +1281,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.15";
-    in-out property <string> update-status-text: "Monitor Manager v1.15 (MCCS Engine, Brand Profiles & DisplayConfig)";
+    in-out property <string> app-version: "1.16";
+    in-out property <string> update-status-text: "Monitor Manager v1.16 (ASUS DWC Suite, MCCS Engine & DisplayConfig)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.15";
+    in-out property <string> latest-version: "1.16";
     in-out property <bool> update-checking: false;
     in-out property <bool> update-downloading: false;
     in-out property <bool> update-installing: false;
@@ -1298,6 +1295,30 @@ export component AppWindow inherits Window {
     in-out property <string> update-progress-phase: "";
     in-out property <string> update-progress-detail: "";
     in-out property <bool> show-update-modal: false;
+
+    // Stato ASUS DisplayWidget Center & Sistema Windows
+    in-out property <bool> taskbar-autohide: false;
+    in-out property <bool> win-system-light: false;
+    in-out property <bool> win-apps-light: false;
+    in-out property <bool> power-saving-mode: false;
+    in-out property <string> update-policy: "manual";
+    in-out property <bool> compare-active: false;
+    in-out property <string> gameplus-delivery: "auto";
+    in-out property <int> gameplus-offset-x: 0;
+    in-out property <int> gameplus-offset-y: 0;
+    in-out property <[UiWindowEntry]> open-windows: [];
+    in-out property <bool> hotkeys-enabled: true;
+    in-out property <[UiHotkeyItem]> hotkey-items: [];
+    in-out property <bool> app-tweaker-enabled: false;
+    in-out property <[UiAppRule]> app-rules: [];
+    in-out property <bool> ai-visual-active: false;
+    in-out property <bool> ai-night-schedule: false;
+    in-out property <string> ai-detected-scene: "Desktop";
+    in-out property <int> ai-avg-luma: 128;
+    in-out property <int> ai-dark-pct: 20;
+    in-out property <int> ai-night-start: 21;
+    in-out property <int> ai-night-end: 7;
+    in-out property <string> last-ai-feedback: "";
 
     // Stato modale di conferma per VCP critici (Reset Fabbrica / Spegnimento DPMS)
     in-out property <bool> confirm-vcp-open: false;
@@ -1328,6 +1349,39 @@ export component AppWindow inherits Window {
     callback close-window();
     callback move-monitor(int /* from_idx */, int /* to_idx */);
     callback toggle-acrylic(bool);
+
+    // Callbacks DisplayWidget Center Suite
+    callback select-gamevisual-mode(int /* monitor_id */, int /* mode_idx */);
+    callback reset-gamevisual-mode(int /* monitor_id */);
+    callback toggle-compare(int /* monitor_id */);
+    callback import-display-profile(int /* monitor_id */);
+    callback export-display-profile(int /* monitor_id */);
+    callback set-gamevisual-setting(int /* monitor_id */, string /* key */, int /* value */);
+    callback gp-set-crosshair(int /* monitor_id */, int /* style */);
+    callback gp-set-timer(int /* monitor_id */, int /* preset */);
+    callback gp-toggle-timer-pause();
+    callback gp-reset-timer();
+    callback gp-set-fps(int /* monitor_id */, bool /* enabled */);
+    callback gp-set-alignment(int /* monitor_id */, bool /* enabled */);
+    callback gp-nudge-position(int /* monitor_id */, int /* dir */);
+    callback gp-set-delivery(string /* mode */);
+    callback refresh-open-windows();
+    callback snap-window-zone(int /* monitor_idx */, string /* hwnd_str */, string /* layout_id */, int /* zone_idx */);
+    callback toggle-hotkeys-global(bool);
+    callback toggle-hotkey-item(int /* id */, bool /* enabled */);
+    callback update-hotkey-shortcut(int /* id */, string /* shortcut */);
+    callback toggle-app-tweaker(bool);
+    callback add-app-rule(string /* exe */, string /* name */, int /* mode */, int /* bright */, int /* bluelight */, int /* od */, int /* shadow */);
+    callback remove-app-rule(int /* idx */);
+    callback toggle-app-rule(int /* idx */, bool /* enabled */);
+    callback toggle-ai-visual(bool);
+    callback toggle-ai-night-schedule(bool);
+    callback set-ai-night-hours(int /* start */, int /* end */);
+    callback run-ai-command(string /* text */);
+    callback set-taskbar-autohide(bool);
+    callback set-windows-theme(bool /* system_light */, bool /* apps_light */);
+    callback set-power-saving-mode(bool);
+    callback set-update-policy(string);
 
     // --- Palette Colori Reattive ---
     property <bool> is-en: root.lang == "en";
@@ -1365,6 +1419,19 @@ export component AppWindow inherits Window {
             mccs-version: "", vcps-probing: false, discovered-vcps: [],
             sw-lut-enabled: false, sw-gamma: 100, sw-warmth: 0, sw-contrast: 100,
             sw-red: 100, sw-green: 100, sw-blue: 100,
+            is-asus: false, is-oled: false, dual-mode-sup: false, gamevisual-sup: false, gamevisual-mode: 5,
+            variable-od: 0, variable-od-max: 5, variable-od-sup: false,
+            blue-light: 0, blue-light-max: 4, blue-light-sup: false,
+            vivid-pixel: 0, vivid-pixel-max: 100, vivid-pixel-sup: false,
+            elmb: 0, elmb-max: 2, elmb-sup: false,
+            oled-flicker: 0, oled-flicker-max: 2,
+            shadow-boost: 0, shadow-boost-max: 4, shadow-boost-sup: false,
+            dynamic-shadow-boost: false, dynamic-shadow-boost-sup: false,
+            frame-rate-boost: false, vrr-enabled: false, vrr-sup: false,
+            aspect-control: 2, aspect-control-sup: false,
+            color-space: 0, color-space-sup: false,
+            crosshair-style: 0, timer-preset: 0, fps-counter: false, alignment-grid: false,
+            caps-raw: "", mpu-ver: "",
         };
 
     property <string> active-input-label:
@@ -1586,7 +1653,13 @@ export component AppWindow inherits Window {
                                         clicked => {
                                             root.selected-monitor-index = idx;
                                             root.sync-current-values();
-                                            if (root.active-view != "profiles") {
+                                            if (root.active-view != "profiles"
+                                                && root.active-view != "gamevisual"
+                                                && root.active-view != "gameplus"
+                                                && root.active-view != "multiscreen"
+                                                && root.active-view != "hotkeys"
+                                                && root.active-view != "apptweaker"
+                                                && root.active-view != "ai") {
                                                 root.active-view = "dashboard";
                                             }
                                         }
@@ -1752,6 +1825,97 @@ export component AppWindow inherits Window {
                                     height: 1px;
                                     width: 100%;
                                     background: #323744;
+                                }
+                            }
+
+                            // Intestazione ASUS DisplayWidget Suite
+                            Rectangle {
+                                height: 18px;
+                                background: transparent;
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    Text {
+                                        text: "DISPLAYWIDGET SUITE";
+                                        color: #6f788a;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        letter-spacing: 0.8px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            for nav in [
+                                { id: "gamevisual", it: "GameVisual", en: "GameVisual", tag: "GV" },
+                                { id: "gameplus", it: "GamePlus", en: "GamePlus", tag: "GP" },
+                                { id: "multiscreen", it: "MultiScreen", en: "MultiScreen", tag: "MS" },
+                                { id: "hotkeys", it: "Tasto di scelta rapida", en: "Hotkeys", tag: "HK" },
+                                { id: "apptweaker", it: "App Tweaker", en: "App Tweaker", tag: "AT" },
+                                { id: "ai", it: "Assistente IA", en: "AI Assistant", tag: "AI" },
+                            ] : Rectangle {
+                                height: 35px;
+                                border-radius: 8px;
+                                background: root.active-view == nav.id ? #2f3441 : (nav-ta.has-hover ? #242833 : transparent);
+                                border-width: root.active-view == nav.id ? 1px : (nav-ta.has-hover ? 1px : 0px);
+                                border-color: root.active-view == nav.id ? root.accent-main : (nav-ta.has-hover ? root.accent-main.with-alpha(0.3) : transparent);
+
+                                animate background, border-color {
+                                    duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+                                    easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                }
+
+                                nav-ta := TouchArea {
+                                    width: 100%;
+                                    height: 100%;
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.active-view = nav.id;
+                                        if (nav.id == "multiscreen" || nav.id == "apptweaker") {
+                                            root.refresh-open-windows();
+                                        }
+                                    }
+                                }
+
+                                if root.active-view == nav.id : Rectangle {
+                                    x: 0px;
+                                    y: 8px;
+                                    width: 3px;
+                                    height: 19px;
+                                    border-radius: 1.5px;
+                                    background: root.accent-main;
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 10px;
+                                    spacing: 10px;
+                                    alignment: start;
+
+                                    Rectangle {
+                                        width: 22px;
+                                        height: 18px;
+                                        y: (parent.height - self.height) / 2;
+                                        border-radius: 5px;
+                                        background: root.active-view == nav.id ? root.accent-main.with-alpha(0.22) : #262b36;
+                                        border-width: 1px;
+                                        border-color: root.active-view == nav.id ? root.accent-main.with-alpha(0.6) : #353b4a;
+                                        Text {
+                                            text: nav.tag;
+                                            color: root.active-view == nav.id ? root.accent-main : #9da5b4;
+                                            font-size: 9.5px;
+                                            font-weight: 800;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    Text {
+                                        text: root.is-en ? nav.en : nav.it;
+                                        color: root.active-view == nav.id ? #ffffff : #c3c9d5;
+                                        font-size: 12.5px;
+                                        font-weight: root.active-view == nav.id ? 600 : 500;
+                                        vertical-alignment: center;
+                                    }
                                 }
                             }
 
@@ -3542,10 +3706,329 @@ export component AppWindow inherits Window {
                             }
 
                             // ========================================================
-                            // VISTA 4: IMPOSTAZIONI (Organizzate in 4 Card Tematiche)
+                            // VISTE DISPLAYWIDGET CENTER SUITE (ASUS TUF GAMING PARITY)
+                            // ========================================================
+                            if root.active-view == "gamevisual" : GameVisualView {
+                                height: Math.max(660px, sv.visible-height - 38px);
+                                mon: root.current-monitor;
+                                is-it: !root.is-en;
+                                compare-active: root.compare-active;
+                                power-saving-mode: root.power-saving-mode;
+                                accent: root.accent-main;
+                                select-mode(m) => { root.select-gamevisual-mode(root.current-monitor.id, m); }
+                                reset-mode => { root.reset-gamevisual-mode(root.current-monitor.id); }
+                                toggle-compare => { root.toggle-compare(root.current-monitor.id); }
+                                import-profile => { root.import-display-profile(root.current-monitor.id); }
+                                export-profile => { root.export-display-profile(root.current-monitor.id); }
+                                set-setting(k, v) => { root.set-gamevisual-setting(root.current-monitor.id, k, v); }
+                            }
+
+                            if root.active-view == "gameplus" : GamePlusView {
+                                height: Math.max(620px, sv.visible-height - 38px);
+                                mon: root.current-monitor;
+                                is-it: !root.is-en;
+                                delivery-mode: root.gameplus-delivery;
+                                offset-x: root.gameplus-offset-x;
+                                offset-y: root.gameplus-offset-y;
+                                accent: root.accent-main;
+                                set-crosshair(s) => { root.gp-set-crosshair(root.current-monitor.id, s); }
+                                set-timer(p) => { root.gp-set-timer(root.current-monitor.id, p); }
+                                toggle-timer-pause => { root.gp-toggle-timer-pause(); }
+                                reset-timer => { root.gp-reset-timer(); }
+                                set-fps(en) => { root.gp-set-fps(root.current-monitor.id, en); }
+                                set-alignment(en) => { root.gp-set-alignment(root.current-monitor.id, en); }
+                                nudge-position(d) => { root.gp-nudge-position(root.current-monitor.id, d); }
+                                set-delivery(m) => { root.gp-set-delivery(m); }
+                            }
+
+                            if root.active-view == "multiscreen" : MultiScreenView {
+                                height: Math.max(600px, sv.visible-height - 38px);
+                                is-it: !root.is-en;
+                                active-monitor-idx: root.selected-monitor-index;
+                                windows: root.open-windows;
+                                accent: root.accent-main;
+                                refresh-windows => { root.refresh-open-windows(); }
+                                snap-window(hwnd, layout, z) => { root.snap-window-zone(root.selected-monitor-index, hwnd, layout, z); }
+                            }
+
+                            if root.active-view == "hotkeys" : HotkeysView {
+                                height: Math.max(580px, sv.visible-height - 38px);
+                                is-it: !root.is-en;
+                                hotkeys-enabled: root.hotkeys-enabled;
+                                items: root.hotkey-items;
+                                accent: root.accent-main;
+                                toggle-global(en) => { root.toggle-hotkeys-global(en); }
+                                toggle-item(id, en) => { root.toggle-hotkey-item(id, en); }
+                                update-shortcut(id, sc) => { root.update-hotkey-shortcut(id, sc); }
+                            }
+
+                            if root.active-view == "apptweaker" : AppTweakerView {
+                                height: Math.max(620px, sv.visible-height - 38px);
+                                is-it: !root.is-en;
+                                tweaker-enabled: root.app-tweaker-enabled;
+                                power-saving-mode: root.power-saving-mode;
+                                running-apps: root.open-windows;
+                                rules: root.app-rules;
+                                accent: root.accent-main;
+                                toggle-tweaker(en) => { root.toggle-app-tweaker(en); }
+                                refresh-apps => { root.refresh-open-windows(); }
+                                add-rule(exe, name, m, br, bl, od, sh) => { root.add-app-rule(exe, name, m, br, bl, od, sh); }
+                                remove-rule(idx) => { root.remove-app-rule(idx); }
+                                toggle-rule(idx, en) => { root.toggle-app-rule(idx, en); }
+                            }
+
+                            if root.active-view == "ai" : AiAssistantView {
+                                height: Math.max(620px, sv.visible-height - 38px);
+                                is-it: !root.is-en;
+                                ai-visual-active: root.ai-visual-active;
+                                ai-night-schedule: root.ai-night-schedule;
+                                ai-detected-scene: root.ai-detected-scene;
+                                ai-avg-luma: root.ai-avg-luma;
+                                ai-dark-pct: root.ai-dark-pct;
+                                night-start: root.ai-night-start;
+                                night-end: root.ai-night-end;
+                                last-ai-feedback: root.last-ai-feedback;
+                                accent: root.accent-main;
+                                toggle-ai-visual(en) => { root.toggle-ai-visual(en); }
+                                toggle-night-schedule(en) => { root.toggle-ai-night-schedule(en); }
+                                set-night-hours(st, en) => { root.set-ai-night-hours(st, en); }
+                                run-command(txt) => { root.run-ai-command(txt); }
+                            }
+
+                            // ========================================================
+                            // VISTA 4: IMPOSTAZIONI (Organizzate in Card Tematiche)
                             // ========================================================
                             if root.active-view == "settings" : VerticalLayout {
                                 spacing: 14px;
+
+                                // CARD 0: IMPOSTAZIONI APPLICAZIONE & WINDOWS (DWC SUITE)
+                                Rectangle {
+                                    border-radius: 12px;
+                                    background: #21252e;
+                                    border-width: 1px;
+                                    border-color: #2d323e;
+
+                                    VerticalLayout {
+                                        padding: 20px;
+                                        spacing: 14px;
+
+                                        HorizontalLayout {
+                                            spacing: 10px;
+                                            alignment: start;
+                                            CategoryBadge {
+                                                accent: root.accent-main;
+                                                kind: "gaming";
+                                            }
+                                            Text {
+                                                text: root.is-en ? "Display, Audio, Theme & Power Settings" : "Impostazioni Applicazione, HDR, Tema & Alimentazione";
+                                                color: #ffffff;
+                                                font-size: 15px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        // Display HDR (Windows DisplayConfig)
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            spacing: 16px;
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 3px;
+                                                Text {
+                                                    text: "Display HDR (" + root.current-monitor.name + ")";
+                                                    color: #e9edf5;
+                                                    font-size: 13px;
+                                                    font-weight: 600;
+                                                }
+                                                Text {
+                                                    text: root.is-en
+                                                        ? "Note: HDR increases battery drain on laptops and may briefly black out the screen during plug/unplug."
+                                                        : "Nota: la riproduzione di contenuti HDR a batteria riduce l'autonomia; lo schermo può oscurarsi brevemente durante il cambio.";
+                                                    color: #8f98ab;
+                                                    font-size: 11px;
+                                                    wrap: word-wrap;
+                                                }
+                                            }
+                                            TitaniumToggle {
+                                                checked: root.current-monitor.hdr-enabled;
+                                                accent: root.accent-main;
+                                                toggled(val) => {
+                                                    root.set-hdr-enabled(root.current-monitor.id, val);
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle { height: 1px; background: #2d323e; }
+
+                                        // Nascondi automaticamente la barra delle applicazioni in Modalità desktop
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            Text {
+                                                text: root.is-en
+                                                    ? "Automatically hide the taskbar in desktop mode"
+                                                    : "Nascondi automaticamente la barra delle applicazioni in Modalità desktop";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                vertical-alignment: center;
+                                            }
+                                            TitaniumToggle {
+                                                checked <=> root.taskbar-autohide;
+                                                accent: root.accent-main;
+                                                toggled(val) => { root.set-taskbar-autohide(val); }
+                                            }
+                                        }
+
+                                        Rectangle { height: 1px; background: #2d323e; }
+
+                                        // Tema del colore di sfondo Windows / App
+                                        VerticalLayout {
+                                            spacing: 10px;
+                                            Text {
+                                                text: root.is-en ? "Background Color Theme (Windows 10/11)" : "Tema del colore di sfondo";
+                                                color: #e9edf5;
+                                                font-size: 13px;
+                                                font-weight: 600;
+                                            }
+
+                                            HorizontalLayout {
+                                                alignment: space-between;
+                                                Text {
+                                                    text: root.is-en ? "Default Windows mode" : "Scegli il tema del colore per la modalità Windows predefinita";
+                                                    color: #c5cbd6;
+                                                    font-size: 12.5px;
+                                                    vertical-alignment: center;
+                                                }
+                                                HorizontalLayout {
+                                                    spacing: 8px;
+                                                    TitaniumChip {
+                                                        text: root.is-en ? "Light" : "Leggero";
+                                                        active: root.win-system-light;
+                                                        accent: root.accent-main;
+                                                        glow-style: root.glow-style;
+                                                        clicked => { root.set-windows-theme(true, root.win-apps-light); }
+                                                    }
+                                                    TitaniumChip {
+                                                        text: root.is-en ? "Dark" : "Scuro";
+                                                        active: !root.win-system-light;
+                                                        accent: root.accent-main;
+                                                        glow-style: root.glow-style;
+                                                        clicked => { root.set-windows-theme(false, root.win-apps-light); }
+                                                    }
+                                                }
+                                            }
+
+                                            HorizontalLayout {
+                                                alignment: space-between;
+                                                Text {
+                                                    text: root.is-en ? "Default App mode" : "Scegli il tema del colore per la modalità App predefinita";
+                                                    color: #c5cbd6;
+                                                    font-size: 12.5px;
+                                                    vertical-alignment: center;
+                                                }
+                                                HorizontalLayout {
+                                                    spacing: 8px;
+                                                    TitaniumChip {
+                                                        text: root.is-en ? "Light" : "Leggero";
+                                                        active: root.win-apps-light;
+                                                        accent: root.accent-main;
+                                                        glow-style: root.glow-style;
+                                                        clicked => { root.set-windows-theme(root.win-system-light, true); }
+                                                    }
+                                                    TitaniumChip {
+                                                        text: root.is-en ? "Dark" : "Scuro";
+                                                        active: !root.win-apps-light;
+                                                        accent: root.accent-main;
+                                                        glow-style: root.glow-style;
+                                                        clicked => { root.set-windows-theme(root.win-system-light, false); }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle { height: 1px; background: #2d323e; }
+
+                                        // Impostazioni alimentazione (Modalità standard vs Risparmio energetico)
+                                        VerticalLayout {
+                                            spacing: 8px;
+                                            Text {
+                                                text: root.is-en ? "Power Settings" : "Impostazioni alimentazione";
+                                                color: #e9edf5;
+                                                font-size: 13px;
+                                                font-weight: 600;
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                TitaniumChip {
+                                                    text: root.is-en ? "Standard Mode (Full Access)" : "Modalità standard (Tutte le funzioni)";
+                                                    active: !root.power-saving-mode;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-power-saving-mode(false); }
+                                                }
+                                                TitaniumChip {
+                                                    text: root.is-en ? "Power Saving (Brightness Only)" : "Modalità risparmio energetico (Solo luminosità)";
+                                                    active: root.power-saving-mode;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-power-saving-mode(true); }
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle { height: 1px; background: #2d323e; }
+
+                                        // Sel. Ingr. + Audio Volume
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            spacing: 12px;
+                                            Text {
+                                                text: root.is-en ? "Input Source" : "Sel. Ingr.";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                vertical-alignment: center;
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 6px;
+                                                for inp in [
+                                                    { val: 15, lbl: "DisplayPort 1" },
+                                                    { val: 17, lbl: "HDMI 1" },
+                                                    { val: 18, lbl: "HDMI 2" },
+                                                    { val: 16, lbl: "DP 2" },
+                                                    { val: 27, lbl: "USB-C" },
+                                                ] : TitaniumChip {
+                                                    text: inp.lbl;
+                                                    active: root.current-monitor.input-source == inp.val;
+                                                    enabled: root.current-monitor.input-sup;
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-vcp(root.current-monitor.id, 96, inp.val); }
+                                                }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: 14px;
+                                            Text {
+                                                text: "Audio Volume (" + root.current-monitor.volume + ")";
+                                                color: #c5cbd6;
+                                                font-size: 13px;
+                                                vertical-alignment: center;
+                                                width: 150px;
+                                            }
+                                            NeonSlider {
+                                                horizontal-stretch: 1;
+                                                value: root.current-monitor.volume;
+                                                minimum: 0;
+                                                maximum: 100;
+                                                track-color: root.accent-main;
+                                                glow-style: root.glow-style;
+                                                enabled: root.current-monitor.volume-sup;
+                                                changed(v) => { root.set-vcp(root.current-monitor.id, 98, v); }
+                                            }
+                                        }
+                                    }
+                                }
 
                                 // CARD 1: SISTEMA & COMPORTAMENTO
                                 Rectangle {
@@ -3915,16 +4398,28 @@ export component AppWindow inherits Window {
                                             alignment: space-between;
                                             Text {
                                                 text: root.is-en
-                                                    ? "Check for GitHub updates automatically on startup"
-                                                    : "Controlla aggiornamenti GitHub automaticamente all'avvio";
+                                                    ? "Update mode (Manual / Automatic on startup)"
+                                                    : "Modalità aggiornamenti (Manuale / Automatico all'avvio)";
                                                 color: #c5cbd6;
                                                 font-size: 13px;
                                                 vertical-alignment: center;
                                             }
-                                            TitaniumToggle {
-                                                checked <=> root.auto-check-updates;
-                                                accent: root.accent-main;
-                                                toggled => { root.save-settings(); }
+                                            HorizontalLayout {
+                                                spacing: 8px;
+                                                TitaniumChip {
+                                                    text: root.is-en ? "Manual" : "Manuale";
+                                                    active: root.update-policy != "auto";
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-update-policy("manual"); }
+                                                }
+                                                TitaniumChip {
+                                                    text: root.is-en ? "Automatic" : "Automatico";
+                                                    active: root.update-policy == "auto";
+                                                    accent: root.accent-main;
+                                                    glow-style: root.glow-style;
+                                                    clicked => { root.set-update-policy("auto"); }
+                                                }
                                             }
                                         }
 
@@ -4297,10 +4792,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.15 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
+// FINESTRA INSTALLER SETUP v1.16 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.15";
+    title: "Installazione Monitor Manager v1.16";
     preferred-width: 520px;
     preferred-height: 430px;
     background: transparent;
@@ -4312,7 +4807,7 @@ export component SetupWindow inherits Window {
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
     in-out property <float> install-progress: 0.0;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.15 (MCCS Engine, Brand Profiles & DisplayConfig)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.16 (ASUS DWC Suite, MCCS Engine & DisplayConfig)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -4345,7 +4840,7 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.15";
+                        text: "Monitor Manager v1.16";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
@@ -4454,7 +4949,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione... \{Math.round(root.install-progress * 100)}%" : "Installa v1.15 Ora";
+                    text: root.installing ? "Installazione... \{Math.round(root.install-progress * 100)}%" : "Installa v1.16 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;

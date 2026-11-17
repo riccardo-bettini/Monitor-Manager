@@ -1,0 +1,1527 @@
+import { ScrollView, LineEdit } from "std-widgets.slint";
+import { UiMonitor, UiWindowEntry, UiHotkeyItem, UiAppRule } from "types.slint";
+
+component DwcCard inherits Rectangle {
+    background: #181a20;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: #272b36;
+}
+
+component DwcButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    in property <color> accent: #d4a86c;
+    callback clicked;
+
+    height: 30px;
+    min-width: 78px;
+    border-radius: 15px;
+    border-width: 1px;
+    border-color: !enabled ? #23262f : (active ? accent : (ta.has-hover ? #4d5364 : #343947));
+    background: !enabled ? #14161b : (active ? accent.with-alpha(0.18) : (ta.has-hover ? #232733 : #1a1d24));
+    opacity: enabled ? 1.0 : 0.42;
+
+    animate background { duration: 120ms; }
+    animate border-color { duration: 120ms; }
+
+    Text {
+        text: label;
+        color: active ? accent : #e7e9ee;
+        font-size: 11px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        x: 12px;
+        width: parent.width - 24px;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component DwcToggleRow inherits Rectangle {
+    in property <string> title;
+    in property <bool> checked: false;
+    in property <bool> enabled: true;
+    in property <color> accent: #d4a86c;
+    callback toggled(bool);
+
+    height: 34px;
+    opacity: enabled ? 1.0 : 0.4;
+
+    HorizontalLayout {
+        spacing: 10px;
+        Text {
+            text: title;
+            color: #dde0e7;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        Rectangle {
+            y: (parent.height - self.height) / 2;
+            width: 40px;
+            height: 20px;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: checked ? accent : #484e5e;
+            background: checked ? accent.with-alpha(0.28) : #14161c;
+            animate background { duration: 140ms; }
+            animate border-color { duration: 140ms; }
+
+            Rectangle {
+                x: checked ? parent.width - self.width - 3px : 3px;
+                y: 3px;
+                width: 14px;
+                height: 14px;
+                border-radius: 7px;
+                background: checked ? #f7e6cb : #8e96a8;
+                animate x { duration: 140ms; easing: ease-out; }
+            }
+
+            TouchArea {
+                enabled: root.enabled;
+                mouse-cursor: pointer;
+                clicked => { root.toggled(!root.checked); }
+            }
+        }
+    }
+}
+
+component DwcSliderRow inherits Rectangle {
+    in property <string> title;
+    in-out property <int> value: 50;
+    in property <int> maximum: 100;
+    in property <int> step: 1;
+    in property <bool> enabled: true;
+    in property <color> track-color: #d4a86c;
+    in property <color> thumb-color: #f3dfc1;
+    callback changed(int);
+
+    height: 34px;
+    opacity: enabled ? 1.0 : 0.38;
+
+    property <int> safe-max: Math.max(1, maximum);
+    property <int> clamped: Math.max(0, Math.min(safe-max, value));
+
+    HorizontalLayout {
+        spacing: 10px;
+
+        Text {
+            text: title;
+            color: #dde0e7;
+            font-size: 12px;
+            width: 138px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 34px;
+
+            // Inactive track
+            Rectangle {
+                x: 0;
+                y: (parent.height - self.height) / 2;
+                width: parent.width;
+                height: 3px;
+                border-radius: 1.5px;
+                background: #2f3440;
+            }
+
+            // Active fill
+            Rectangle {
+                x: 0;
+                y: (parent.height - self.height) / 2;
+                width: (parent.width - 14px) * (clamped / safe-max) + 7px;
+                height: 3px;
+                border-radius: 1.5px;
+                background: track-color;
+            }
+
+            // Thumb
+            Rectangle {
+                x: (parent.width - 14px) * (clamped / safe-max);
+                y: (parent.height - self.height) / 2;
+                width: 14px;
+                height: 14px;
+                border-radius: 7px;
+                border-width: 2px;
+                border-color: #ffffff;
+                background: thumb-color;
+            }
+
+            ta := TouchArea {
+                enabled: root.enabled;
+                mouse-cursor: pointer;
+                function apply-x(px: length) {
+                    let ratio = Math.max(0.0, Math.min(1.0, (px - 7px) / Math.max(1px, parent.width - 14px)));
+                    let raw = Math.round(ratio * safe-max);
+                    let stepped = Math.min(safe-max, Math.round(raw / Math.max(1, step)) * Math.max(1, step));
+                    if (stepped != value) {
+                        value = stepped;
+                        changed(stepped);
+                    }
+                }
+                pointer-event(ev) => {
+                    if (ev.kind == PointerEventKind.down) {
+                        apply-x(self.mouse-x);
+                    }
+                }
+                moved => {
+                    if (self.pressed) {
+                        apply-x(self.mouse-x);
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: clamped;
+            color: #eceef3;
+            font-size: 12px;
+            font-weight: 600;
+            width: 30px;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component DwcChipSelector inherits Rectangle {
+    in property <string> title;
+    in property <[string]> labels;
+    in property <[int]> values;
+    in property <int> selected-value;
+    in property <bool> enabled: true;
+    in property <color> accent: #d4a86c;
+    callback selected(int);
+
+    height: 38px;
+    opacity: enabled ? 1.0 : 0.4;
+
+    HorizontalLayout {
+        spacing: 10px;
+        Text {
+            text: title;
+            color: #dde0e7;
+            font-size: 12px;
+            width: 112px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            horizontal-stretch: 1;
+            for lbl[idx] in labels : Rectangle {
+                height: 26px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 6px;
+                border-width: 1px;
+                property <int> v: values[idx];
+                property <bool> is-sel: v == selected-value;
+                border-color: is-sel ? accent : (cta.has-hover ? #4d5364 : #2c313d);
+                background: is-sel ? accent.with-alpha(0.22) : #14161c;
+                animate background { duration: 110ms; }
+                Text {
+                    text: lbl;
+                    color: is-sel ? accent : #cfd4df;
+                    font-size: 11px;
+                    font-weight: is-sel ? 700 : 500;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                cta := TouchArea {
+                    enabled: root.enabled;
+                    mouse-cursor: pointer;
+                    clicked => { root.selected(v); }
+                }
+            }
+        }
+    }
+}
+
+component GameVisualModeCard inherits Rectangle {
+    in property <int> mode-idx;
+    in property <string> label;
+    in property <bool> selected;
+    in property <bool> enabled: true;
+    in property <color> accent: #d4a86c;
+    callback clicked;
+
+    width: 82px;
+    height: 76px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: selected ? accent : (mta.has-hover ? #565d70 : #3a342a);
+    background: selected ? accent : (mta.has-hover ? #25221c : #1d1a16);
+    opacity: enabled ? 1.0 : 0.45;
+    animate background { duration: 120ms; }
+    animate border-color { duration: 120ms; }
+
+    property <color> fg: selected ? #171410 : accent;
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 6px;
+        alignment: center;
+
+        Rectangle {
+            width: 34px;
+            height: 28px;
+            x: (parent.width - self.width) / 2 - 8px;
+            background: transparent;
+
+            // Mode distinct badge / icon graphic
+            if mode-idx == 0 : Rectangle {
+                width: 30px; height: 22px; x: 2px; y: 3px;
+                border-radius: 3px; border-width: 1.5px; border-color: fg;
+                Text { text: "AI"; color: fg; font-size: 10px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+            }
+            if mode-idx == 1 : Rectangle {
+                width: 24px; height: 24px; x: 5px; y: 2px;
+                border-radius: 12px; border-width: 1.5px; border-color: fg;
+                Text { text: "RTS"; color: fg; font-size: 8px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+            }
+            if mode-idx == 2 : Rectangle {
+                width: 24px; height: 24px; x: 5px; y: 2px;
+                border-radius: 12px; border-width: 1.5px; border-color: fg;
+                Rectangle { width: 10px; height: 10px; x: 7px; y: 7px; border-radius: 5px; border-width: 1.5px; border-color: fg; }
+                Rectangle { width: 2px; height: 22px; x: 11px; y: 1px; background: fg; }
+                Rectangle { width: 22px; height: 2px; x: 1px; y: 11px; background: fg; }
+            }
+            if mode-idx == 3 : Rectangle {
+                width: 30px; height: 22px; x: 2px; y: 3px;
+                border-radius: 3px; border-width: 1.5px; border-color: fg;
+                Rectangle { width: 30px; height: 6px; y: 0; background: fg.with-alpha(0.28); border-color: fg; border-width: 1px; }
+                Text { text: "24p"; color: fg; font-size: 8px; font-weight: 700; y: 7px; horizontal-alignment: center; }
+            }
+            if mode-idx == 4 : Rectangle {
+                width: 30px; height: 22px; x: 2px; y: 3px;
+                border-radius: 3px; border-width: 1.5px; border-color: fg;
+                Path {
+                    width: 24px; height: 14px; x: 3px; y: 5px;
+                    stroke: fg; stroke-width: 1.5px;
+                    MoveTo { x: 1; y: 13; }
+                    LineTo { x: 8; y: 3; }
+                    LineTo { x: 14; y: 10; }
+                    LineTo { x: 18; y: 6; }
+                    LineTo { x: 23; y: 13; }
+                }
+            }
+            if mode-idx == 5 : Path {
+                width: 28px; height: 22px; x: 3px; y: 3px;
+                stroke: fg; stroke-width: 1.8px;
+                MoveTo { x: 4; y: 20; } LineTo { x: 4; y: 3; }
+                MoveTo { x: 4; y: 3; } LineTo { x: 24; y: 3; } LineTo { x: 22; y: 13; } LineTo { x: 4; y: 13; }
+                MoveTo { x: 14; y: 3; } LineTo { x: 14; y: 13; }
+                MoveTo { x: 4; y: 8; } LineTo { x: 23; y: 8; }
+            }
+            if mode-idx == 6 : Rectangle {
+                width: 26px; height: 24px; x: 4px; y: 2px;
+                Rectangle { width: 14px; height: 14px; x: 6px; y: 0px; border-radius: 7px; border-width: 1.4px; border-color: fg; }
+                Rectangle { width: 14px; height: 14px; x: 1px; y: 9px; border-radius: 7px; border-width: 1.4px; border-color: fg; }
+                Rectangle { width: 14px; height: 14px; x: 11px; y: 9px; border-radius: 7px; border-width: 1.4px; border-color: fg; }
+            }
+            if mode-idx == 7 : Path {
+                width: 24px; height: 24px; x: 5px; y: 2px;
+                stroke: fg; stroke-width: 2px;
+                MoveTo { x: 3; y: 21; } LineTo { x: 21; y: 3; }
+                MoveTo { x: 3; y: 3; } LineTo { x: 21; y: 21; }
+            }
+            if mode-idx == 8 : Rectangle {
+                width: 24px; height: 24px; x: 5px; y: 2px;
+                Rectangle { width: 10px; height: 10px; x: 7px; y: 1px; border-radius: 5px; border-width: 1.5px; border-color: fg; }
+                Rectangle { width: 18px; height: 10px; x: 3px; y: 13px; border-radius: 5px; border-width: 1.5px; border-color: fg; }
+            }
+            if mode-idx == 9 : Rectangle {
+                width: 30px; height: 22px; x: 2px; y: 3px;
+                border-radius: 3px; border-width: 1.5px; border-color: fg;
+                Text { text: "HDR"; color: fg; font-size: 9px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+            }
+        }
+
+        Text {
+            text: label;
+            color: selected ? #171410 : #e8e9ee;
+            font-size: 10px;
+            font-weight: selected ? 700 : 500;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    mta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component GameVisualView inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <bool> is-it: true;
+    in property <bool> compare-active: false;
+    in property <bool> power-saving-mode: false;
+    in property <color> accent: #d4a86c;
+
+    callback select-mode(int);
+    callback reset-mode;
+    callback toggle-compare;
+    callback import-profile;
+    callback export-profile;
+    callback set-setting(string, int);
+
+    property <bool> show-info-popup: false;
+    property <bool> mode-page-second: mon.gamevisual-mode >= 6;
+    property <bool> controls-unlocked: !power-saving-mode;
+
+    function mode-title(m: int) -> string {
+        if (m == 0) { return is-it ? "Modalità AI Visual" : "AI Visual Mode"; }
+        if (m == 1) { return is-it ? "Modalità RTS/RPG" : "RTS/RPG Mode"; }
+        if (m == 2) { return is-it ? "Modalità FPS" : "FPS Mode"; }
+        if (m == 3) { return is-it ? "Modalità Cinema" : "Cinema Mode"; }
+        if (m == 4) { return is-it ? "Modalità Scenario" : "Scenery Mode"; }
+        if (m == 5) { return is-it ? "Modalità gara" : "Racing Mode"; }
+        if (m == 6) { return is-it ? "Modalità sRGB" : "sRGB Mode"; }
+        if (m == 7) { return is-it ? "Modalità MOBA" : "MOBA Mode"; }
+        if (m == 8) { return is-it ? "Modalità Utente" : "User Mode"; }
+        return is-it ? "Modalità HDR" : "HDR Mode";
+    }
+
+    VerticalLayout {
+        spacing: 12px;
+        padding: 4px;
+
+        // Top Header + Mode Carousel
+        HorizontalLayout {
+            alignment: space-between;
+            VerticalLayout {
+                spacing: 2px;
+                Text { text: "GameVisual"; color: #f3f4f7; font-size: 18px; font-weight: 700; }
+                Text { text: is-it ? "Seleziona modalità" : "Select mode"; color: accent; font-size: 12px; font-weight: 600; }
+            }
+            if power-saving-mode : Rectangle {
+                height: 26px;
+                border-radius: 13px;
+                background: #f59e0b.with-alpha(0.16);
+                border-width: 1px;
+                border-color: #f59e0b.with-alpha(0.5);
+                HorizontalLayout {
+                    padding-left: 10px; padding-right: 10px;
+                    Text {
+                        text: is-it ? "Risparmio energetico attivo (solo Luminosità)" : "Power Saving active (Brightness only)";
+                        color: #fbbf24; font-size: 11px; vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // Mode Selector Row (< cards >) matching DisplayWidget Center
+        HorizontalLayout {
+            spacing: 6px;
+            height: 78px;
+
+            Rectangle {
+                width: 24px;
+                border-radius: 6px;
+                background: prev-ta.has-hover ? #232630 : transparent;
+                Text { text: "‹"; color: #b9becb; font-size: 20px; horizontal-alignment: center; vertical-alignment: center; }
+                prev-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { mode-page-second = false; }
+                }
+            }
+
+            if !mode-page-second : HorizontalLayout {
+                spacing: 8px;
+                horizontal-stretch: 1;
+                GameVisualModeCard { mode-idx: 0; label: "AI Visual"; selected: mon.gamevisual-mode == 0; enabled: controls-unlocked; accent: accent; clicked => { select-mode(0); } }
+                GameVisualModeCard { mode-idx: 1; label: "RTS/RPG"; selected: mon.gamevisual-mode == 1; enabled: controls-unlocked; accent: accent; clicked => { select-mode(1); } }
+                GameVisualModeCard { mode-idx: 2; label: "FPS"; selected: mon.gamevisual-mode == 2; enabled: controls-unlocked; accent: accent; clicked => { select-mode(2); } }
+                GameVisualModeCard { mode-idx: 3; label: "CINEMA"; selected: mon.gamevisual-mode == 3; enabled: controls-unlocked; accent: accent; clicked => { select-mode(3); } }
+                GameVisualModeCard { mode-idx: 4; label: is-it ? "Scenario" : "Scenery"; selected: mon.gamevisual-mode == 4; enabled: controls-unlocked; accent: accent; clicked => { select-mode(4); } }
+                GameVisualModeCard { mode-idx: 5; label: is-it ? "Gara" : "Racing"; selected: mon.gamevisual-mode == 5; enabled: controls-unlocked; accent: accent; clicked => { select-mode(5); } }
+                GameVisualModeCard { mode-idx: 6; label: "sRGB"; selected: mon.gamevisual-mode == 6; enabled: controls-unlocked; accent: accent; clicked => { select-mode(6); } }
+                GameVisualModeCard { mode-idx: 7; label: "MOBA"; selected: mon.gamevisual-mode == 7; enabled: controls-unlocked; accent: accent; clicked => { select-mode(7); } }
+            }
+
+            if mode-page-second : HorizontalLayout {
+                spacing: 8px;
+                horizontal-stretch: 1;
+                GameVisualModeCard { mode-idx: 2; label: "FPS"; selected: mon.gamevisual-mode == 2; enabled: controls-unlocked; accent: accent; clicked => { select-mode(2); } }
+                GameVisualModeCard { mode-idx: 3; label: "CINEMA"; selected: mon.gamevisual-mode == 3; enabled: controls-unlocked; accent: accent; clicked => { select-mode(3); } }
+                GameVisualModeCard { mode-idx: 4; label: is-it ? "Scenario" : "Scenery"; selected: mon.gamevisual-mode == 4; enabled: controls-unlocked; accent: accent; clicked => { select-mode(4); } }
+                GameVisualModeCard { mode-idx: 5; label: is-it ? "Gara" : "Racing"; selected: mon.gamevisual-mode == 5; enabled: controls-unlocked; accent: accent; clicked => { select-mode(5); } }
+                GameVisualModeCard { mode-idx: 6; label: "sRGB"; selected: mon.gamevisual-mode == 6; enabled: controls-unlocked; accent: accent; clicked => { select-mode(6); } }
+                GameVisualModeCard { mode-idx: 7; label: "MOBA"; selected: mon.gamevisual-mode == 7; enabled: controls-unlocked; accent: accent; clicked => { select-mode(7); } }
+                GameVisualModeCard { mode-idx: 8; label: is-it ? "Utente" : "User"; selected: mon.gamevisual-mode == 8; enabled: controls-unlocked; accent: accent; clicked => { select-mode(8); } }
+                GameVisualModeCard { mode-idx: 9; label: "HDR"; selected: mon.gamevisual-mode == 9; enabled: controls-unlocked; accent: accent; clicked => { select-mode(9); } }
+            }
+
+            Rectangle {
+                width: 24px;
+                border-radius: 6px;
+                background: next-ta.has-hover ? #232630 : transparent;
+                Text { text: "›"; color: #b9becb; font-size: 20px; horizontal-alignment: center; vertical-alignment: center; }
+                next-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { mode-page-second = true; }
+                }
+            }
+        }
+
+        // Subheader Bar: Mode Name + Ripristino / Confronta
+        HorizontalLayout {
+            alignment: space-between;
+            Text {
+                text: mode-title(mon.gamevisual-mode);
+                color: #e6e8ed;
+                font-size: 13px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                DwcButton {
+                    label: is-it ? "Ripristino" : "Reset";
+                    enabled: controls-unlocked && mon.ddc-supported;
+                    accent: accent;
+                    clicked => { reset-mode(); }
+                }
+                DwcButton {
+                    label: compare-active ? (is-it ? "Confronto: ORIG" : "Compare: ORIG") : (is-it ? "Confronta" : "Compare");
+                    active: compare-active;
+                    enabled: controls-unlocked;
+                    accent: accent;
+                    clicked => { toggle-compare(); }
+                }
+            }
+        }
+
+        // Split Cards: Immagine (Left) & Colore (Right)
+        HorizontalLayout {
+            spacing: 12px;
+            vertical-stretch: 1;
+
+            // Left Card: IMMAGINE
+            DwcCard {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: 0;
+                    Rectangle {
+                        height: 36px;
+                        background: #23262e;
+                        border-radius: 10px;
+                        Text {
+                            x: 16px;
+                            text: is-it ? "Immagine" : "Image";
+                            color: accent;
+                            font-size: 13px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            padding: 14px;
+                            spacing: 6px;
+
+                            DwcSliderRow {
+                                title: is-it ? "Luminosità" : "Brightness";
+                                value: mon.brightness;
+                                maximum: Math.max(100, mon.brightness-max);
+                                enabled: mon.brightness-sup || mon.is-internal-wmi;
+                                track-color: accent;
+                                changed(v) => { set-setting("brightness", v); }
+                            }
+                            DwcSliderRow {
+                                title: is-it ? "Contrasto" : "Contrast";
+                                value: mon.contrast;
+                                maximum: Math.max(100, mon.contrast-max);
+                                enabled: controls-unlocked && mon.contrast-sup;
+                                track-color: accent;
+                                changed(v) => { set-setting("contrast", v); }
+                            }
+                            DwcSliderRow {
+                                title: is-it ? "OD Variabile" : "Variable OD";
+                                value: mon.variable-od;
+                                maximum: Math.max(1, mon.variable-od-max);
+                                enabled: controls-unlocked && mon.variable-od-sup;
+                                track-color: accent;
+                                changed(v) => { set-setting("variable_od", v); }
+                            }
+                            DwcSliderRow {
+                                title: is-it ? "Filtro luce blu" : "Blue Light Filter";
+                                value: mon.blue-light;
+                                maximum: Math.max(1, mon.blue-light-max);
+                                enabled: controls-unlocked && mon.blue-light-sup;
+                                track-color: accent;
+                                changed(v) => { set-setting("blue_light", v); }
+                            }
+                            DwcSliderRow {
+                                title: "Vivid Pixel";
+                                value: mon.vivid-pixel;
+                                maximum: Math.max(100, mon.vivid-pixel-max);
+                                step: 10;
+                                enabled: controls-unlocked && (mon.vivid-pixel-sup || mon.sharpness-sup);
+                                track-color: accent;
+                                changed(v) => { set-setting("vivid_pixel", v); }
+                            }
+                            DwcSliderRow {
+                                title: "ELMB";
+                                value: mon.elmb;
+                                maximum: Math.max(1, mon.elmb-max);
+                                enabled: controls-unlocked && mon.elmb-sup;
+                                track-color: accent;
+                                changed(v) => { set-setting("elmb", v); }
+                            }
+                            DwcSliderRow {
+                                title: is-it ? "Anti sfarfallio OLED" : "OLED Anti-Flicker";
+                                value: mon.oled-flicker;
+                                maximum: Math.max(2, mon.oled-flicker-max);
+                                enabled: controls-unlocked && mon.is-oled;
+                                track-color: accent;
+                                changed(v) => { set-setting("oled_flicker", v); }
+                            }
+                            DwcSliderRow {
+                                title: "Shadow Boost";
+                                value: mon.shadow-boost;
+                                maximum: Math.max(3, mon.shadow-boost-max);
+                                enabled: controls-unlocked && mon.shadow-boost-sup;
+                                track-color: accent;
+                                changed(v) => { set-setting("shadow_boost", v); }
+                            }
+                            DwcToggleRow {
+                                title: is-it ? "Shadow Boost dinamico" : "Dynamic Shadow Boost";
+                                checked: mon.dynamic-shadow-boost;
+                                enabled: controls-unlocked && mon.dynamic-shadow-boost-sup;
+                                accent: accent;
+                                toggled(v) => { set-setting("dynamic_shadow_boost", v ? 1 : 0); }
+                            }
+                            DwcToggleRow {
+                                title: is-it ? "Potenziamento freq foto" : "Frame Rate Boost";
+                                checked: mon.frame-rate-boost;
+                                enabled: controls-unlocked && mon.dual-mode-sup;
+                                accent: accent;
+                                toggled(v) => { set-setting("frame_rate_boost", v ? 1 : 0); }
+                            }
+                            DwcToggleRow {
+                                title: is-it ? "Freq. di agg. var." : "Variable Refresh Rate";
+                                checked: mon.vrr-enabled;
+                                enabled: controls-unlocked && mon.vrr-sup;
+                                accent: accent;
+                                toggled(v) => { set-setting("vrr_enabled", v ? 1 : 0); }
+                            }
+                            DwcChipSelector {
+                                title: is-it ? "Controllo del formato" : "Aspect Control";
+                                labels: is-it ? ["1:1", "1:1-Riempi", "Rapporto", "Pieno"] : ["1:1", "Fill", "Aspect", "Full"];
+                                values: [1, 2, 3, 5];
+                                selected-value: mon.aspect-control;
+                                enabled: controls-unlocked && mon.aspect-control-sup;
+                                accent: accent;
+                                selected(v) => { set-setting("aspect_control", v); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Right Card: COLORE
+            DwcCard {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: 0;
+                    Rectangle {
+                        height: 36px;
+                        background: #23262e;
+                        border-radius: 10px;
+                        Text {
+                            x: 16px;
+                            text: is-it ? "Colore" : "Color";
+                            color: accent;
+                            font-size: 13px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                    VerticalLayout {
+                        padding: 16px;
+                        spacing: 12px;
+
+                        DwcChipSelector {
+                            title: is-it ? "Ricch. col." : "Color Space";
+                            labels: is-it ? ["Gamma ampia", "sRGB", "DCI-P3"] : ["Wide Gamut", "sRGB", "DCI-P3"];
+                            values: [0, 1, 2];
+                            selected-value: mon.color-space;
+                            enabled: controls-unlocked && (mon.color-space-sup || mon.is-asus);
+                            accent: accent;
+                            selected(v) => { set-setting("color_space", v); }
+                        }
+
+                        DwcSliderRow {
+                            title: is-it ? "Saturazione" : "Saturation";
+                            value: mon.saturation;
+                            maximum: Math.max(100, mon.saturation-max);
+                            enabled: controls-unlocked && (mon.saturation-sup || mon.ddc-supported);
+                            track-color: accent;
+                            changed(v) => { set-setting("saturation", v); }
+                        }
+
+                        DwcChipSelector {
+                            title: is-it ? "Colore" : "Color Temp";
+                            labels: is-it ? ["Caldo", "Normale", "Freddo", "Utente"] : ["Warm", "Normal", "Cool", "User"];
+                            values: [5, 6, 8, 11];
+                            selected-value: mon.color-temp;
+                            enabled: controls-unlocked && mon.color-temp-sup;
+                            accent: accent;
+                            selected(v) => { set-setting("color_preset", v); }
+                        }
+
+                        DwcSliderRow {
+                            title: is-it ? "Rosso" : "Red";
+                            value: mon.red-gain;
+                            maximum: 100;
+                            enabled: controls-unlocked && mon.rgb-sup;
+                            track-color: #e11d48;
+                            thumb-color: #fb113a;
+                            changed(v) => { set-setting("red", v); }
+                        }
+
+                        DwcSliderRow {
+                            title: is-it ? "Verde" : "Green";
+                            value: mon.green-gain;
+                            maximum: 100;
+                            enabled: controls-unlocked && mon.rgb-sup;
+                            track-color: #16a34a;
+                            thumb-color: #16f016;
+                            changed(v) => { set-setting("green", v); }
+                        }
+
+                        DwcSliderRow {
+                            title: is-it ? "Blu" : "Blue";
+                            value: mon.blue-gain;
+                            maximum: 100;
+                            enabled: controls-unlocked && mon.rgb-sup;
+                            track-color: #2563eb;
+                            thumb-color: #2038ff;
+                            changed(v) => { set-setting("blue", v); }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bottom Footer Bar: (i), Importa, Esporta
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+
+            if show-info-popup : Rectangle {
+                height: 30px;
+                border-radius: 6px;
+                background: #222631;
+                border-width: 1px;
+                border-color: accent.with-alpha(0.45);
+                HorizontalLayout {
+                    padding-left: 10px; padding-right: 10px;
+                    Text {
+                        text: mon.name + " • MCCS " + mon.mccs-version + (mon.mpu-ver != "" ? (" • MPU " + mon.mpu-ver) : "");
+                        color: #dce0e8; font-size: 11px; vertical-alignment: center;
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 30px; height: 30px; border-radius: 15px;
+                border-width: 1px; border-color: #3a3f4d;
+                background: ita.has-hover ? #252935 : #181a20;
+                Text { text: "i"; color: #e2e5ec; font-size: 12px; font-weight: 700; font-italic: true; horizontal-alignment: center; vertical-alignment: center; }
+                ita := TouchArea { mouse-cursor: pointer; clicked => { show-info-popup = !show-info-popup; } }
+            }
+            DwcButton { label: is-it ? "Importa" : "Import"; enabled: controls-unlocked; accent: accent; clicked => { import-profile(); } }
+            DwcButton { label: is-it ? "Esporta" : "Export"; accent: accent; clicked => { export-profile(); } }
+        }
+    }
+}
+
+component CrosshairIconPreview inherits Rectangle {
+    in property <int> style-idx;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+
+    if style-idx == 0 : Rectangle {
+        width: 22px; height: 22px; x: 3px; y: 3px;
+        border-radius: 11px; border-width: 1.5px; border-color: #9e8a6b;
+        Path {
+            width: 16px; height: 16px; x: 3px; y: 3px;
+            stroke: #9e8a6b; stroke-width: 1.5px;
+            MoveTo { x: 2; y: 14; } LineTo { x: 14; y: 2; }
+        }
+    }
+    if style-idx == 1 || style-idx == 2 : Rectangle {
+        width: 6px; height: 6px; x: 11px; y: 11px; border-radius: 3px;
+        background: style-idx == 1 ? #0098ff : #00df2a;
+    }
+    if style-idx == 3 || style-idx == 4 : Rectangle {
+        property <color> c: style-idx == 3 ? #0098ff : #00df2a;
+        width: 22px; height: 22px; x: 3px; y: 3px;
+        Rectangle { width: 3px; height: 3px; x: 9.5px; y: 9.5px; background: c; }
+        Rectangle { width: 5px; height: 2px; x: 2px; y: 10px; background: c; }
+        Rectangle { width: 5px; height: 2px; x: 15px; y: 10px; background: c; }
+        Rectangle { width: 2px; height: 5px; x: 10px; y: 2px; background: c; }
+        Rectangle { width: 2px; height: 5px; x: 10px; y: 15px; background: c; }
+    }
+    if style-idx == 5 || style-idx == 6 : Rectangle {
+        property <color> c: style-idx == 5 ? #0098ff : #00df2a;
+        width: 24px; height: 24px; x: 2px; y: 2px;
+        Rectangle { width: 4px; height: 4px; x: 10px; y: 10px; background: c; }
+        Rectangle { width: 7px; height: 3px; x: 1px; y: 10.5px; background: c; }
+        Rectangle { width: 7px; height: 3px; x: 16px; y: 10.5px; background: c; }
+        Rectangle { width: 3px; height: 7px; x: 10.5px; y: 1px; background: c; }
+        Rectangle { width: 3px; height: 7px; x: 10.5px; y: 16px; background: c; }
+    }
+}
+
+export component GamePlusView inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <bool> is-it: true;
+    in property <string> delivery-mode: "auto";
+    in property <int> offset-x: 0;
+    in property <int> offset-y: 0;
+    in property <color> accent: #d4a86c;
+
+    callback set-crosshair(int);
+    callback set-timer(int);
+    callback toggle-timer-pause;
+    callback reset-timer;
+    callback set-fps(bool);
+    callback set-alignment(bool);
+    callback nudge-position(int);
+    callback set-delivery(string);
+
+    property <int> sub-tab: 0; // 0=Mirino, 1=Timer, 2=FPS, 3=Allineamento
+    property <[string]> crosshair-names-it: ["DISATTIVA", "Punto blu", "Dot verde", "Mini Duplex blu", "Mini Duplex verde", "Heavy Duplex blu", "Heavy Duplex verde"];
+    property <[string]> crosshair-names-en: ["OFF", "Blue Dot", "Green Dot", "Mini Duplex Blue", "Mini Duplex Green", "Heavy Duplex Blue", "Heavy Duplex Green"];
+    property <[string]> timer-names-it: ["Disattiva", "30:00 Conto alla rovescia", "40:00 Conto alla rovescia", "50:00 Conto alla rovescia", "60:00 Conto alla rovescia", "90:00 Conto alla rovescia", "Cronometro progressivo"];
+    property <[string]> timer-names-en: ["Off", "30:00 Countdown", "40:00 Countdown", "50:00 Countdown", "60:00 Countdown", "90:00 Countdown", "Stopwatch Up"];
+
+    VerticalLayout {
+        spacing: 14px;
+        padding: 4px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            VerticalLayout {
+                spacing: 2px;
+                Text { text: "GamePlus"; color: #f3f4f7; font-size: 18px; font-weight: 700; }
+                Text { text: is-it ? "Seleziona modalità" : "Select mode"; color: accent; font-size: 12px; font-weight: 600; }
+            }
+            // Output Delivery Pill (Hardware OSD vs Instant Overlay HUD vs Auto Both)
+            HorizontalLayout {
+                spacing: 6px;
+                DwcButton { label: is-it ? "Auto (OSD+HUD)" : "Auto (OSD+HUD)"; active: delivery-mode == "auto"; accent: accent; clicked => { set-delivery("auto"); } }
+                DwcButton { label: is-it ? "Solo Monitor OSD" : "Hardware OSD"; active: delivery-mode == "hardware"; accent: accent; clicked => { set-delivery("hardware"); } }
+                DwcButton { label: is-it ? "Solo Overlay HUD" : "Overlay HUD"; active: delivery-mode == "overlay"; accent: accent; clicked => { set-delivery("overlay"); } }
+            }
+        }
+
+        // 4 Mode Cards (Mirino, Timer, Contatore FPS, Mostra allineamento)
+        HorizontalLayout {
+            spacing: 10px;
+            height: 82px;
+
+            for item[idx] in [
+                { id: 0, it: "Mirino", en: "Crosshair", sym: "⌖" },
+                { id: 1, it: "Timer", en: "Timer", sym: "⏱" },
+                { id: 2, it: "Contatore FPS", en: "FPS Counter", sym: "FPS" },
+                { id: 3, it: "Mostra allineamento", en: "Display Alignment", sym: "⊞" },
+            ] : Rectangle {
+                width: 112px;
+                height: 80px;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: sub-tab == idx ? accent : (gta.has-hover ? #585f72 : #3e362b);
+                background: sub-tab == idx ? accent : #1d1b17;
+                animate background { duration: 120ms; }
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 6px;
+                    alignment: center;
+                    Text {
+                        text: item.sym;
+                        color: sub-tab == idx ? #171410 : accent;
+                        font-size: idx == 2 ? 14px : 20px;
+                        font-weight: 800;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: is-it ? item.it : item.en;
+                        color: sub-tab == idx ? #171410 : #e6e8ee;
+                        font-size: 11px;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+                }
+                gta := TouchArea { mouse-cursor: pointer; clicked => { sub-tab = idx; } }
+            }
+        }
+
+        Text {
+            text: is-it ? "Seleziona stile modalità" : "Select mode style";
+            color: #dde0e7;
+            font-size: 12px;
+        }
+
+        // Style Picker + D-Pad Box
+        DwcCard {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: 0;
+                Rectangle {
+                    height: 36px;
+                    background: #23262e;
+                    border-radius: 10px;
+                    Text {
+                        x: 16px;
+                        text: sub-tab == 0 ? "Crosshair Style" : (sub-tab == 1 ? "Timer Style" : (sub-tab == 2 ? (is-it ? "Contatore FPS" : "FPS Counter") : (is-it ? "Griglia di allineamento" : "Display Alignment")));
+                        color: accent;
+                        font-size: 13px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+
+                HorizontalLayout {
+                    padding: 16px;
+                    spacing: 20px;
+                    vertical-stretch: 1;
+
+                    // Left: Style Grid
+                    ScrollView {
+                        horizontal-stretch: 2;
+
+                        if sub-tab == 0 : VerticalLayout {
+                            spacing: 10px;
+                            for row in [0, 1, 2, 3] : HorizontalLayout {
+                                spacing: 10px;
+                                for col in [0, 1] : Rectangle {
+                                    property <int> idx: row * 2 + col;
+                                    visible: idx < 7;
+                                    horizontal-stretch: 1;
+                                    height: 68px;
+                                    border-radius: 8px;
+                                    border-width: 1px;
+                                    border-color: mon.crosshair-style == idx ? accent : (chta.has-hover ? #3b404e : #242731);
+                                    background: #14161c;
+                                    HorizontalLayout {
+                                        padding: 14px;
+                                        spacing: 14px;
+                                        // Radio ring
+                                        Rectangle {
+                                            width: 18px; height: 18px; y: (parent.height - 28px - self.height) / 2;
+                                            border-radius: 9px; border-width: 1.5px;
+                                            border-color: mon.crosshair-style == idx ? accent : #687082;
+                                            if mon.crosshair-style == idx : Rectangle {
+                                                width: 8px; height: 8px; x: 5px; y: 5px; border-radius: 4px; background: accent;
+                                            }
+                                        }
+                                        CrosshairIconPreview { style-idx: idx; y: (parent.height - 28px - self.height) / 2; }
+                                        Text {
+                                            text: is-it ? crosshair-names-it[idx] : crosshair-names-en[idx];
+                                            color: #eceef4;
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                        }
+                                    }
+                                    chta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { if (idx < 7) { set-crosshair(idx); } }
+                                    }
+                                }
+                            }
+                        }
+
+                        if sub-tab == 1 : VerticalLayout {
+                            spacing: 10px;
+                            for t[idx] in timer-names-it : Rectangle {
+                                height: 52px;
+                                border-radius: 8px;
+                                border-width: 1px;
+                                border-color: mon.timer-preset == idx ? accent : #242731;
+                                background: #14161c;
+                                HorizontalLayout {
+                                    padding: 14px; spacing: 12px;
+                                    Rectangle {
+                                        width: 16px; height: 16px; y: (parent.height - 28px - self.height) / 2;
+                                        border-radius: 8px; border-width: 1.5px; border-color: mon.timer-preset == idx ? accent : #687082;
+                                        if mon.timer-preset == idx : Rectangle { width: 8px; height: 8px; x: 4px; y: 4px; border-radius: 4px; background: accent; }
+                                    }
+                                    Text {
+                                        text: is-it ? timer-names-it[idx] : timer-names-en[idx];
+                                        color: #eceef4; font-size: 12px; font-weight: 600; vertical-alignment: center; horizontal-stretch: 1;
+                                    }
+                                }
+                                TouchArea { mouse-cursor: pointer; clicked => { set-timer(idx); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                DwcButton { label: is-it ? "Pausa / Riprendi" : "Pause / Resume"; accent: accent; clicked => { toggle-timer-pause(); } }
+                                DwcButton { label: is-it ? "Azzera Timer" : "Reset Timer"; accent: accent; clicked => { reset-timer(); } }
+                            }
+                        }
+
+                        if sub-tab == 2 : VerticalLayout {
+                            spacing: 12px;
+                            DwcToggleRow {
+                                title: is-it ? "Mostra Contatore FPS in tempo reale (DWM + Hz)" : "Show Live FPS Counter Overlay (DWM + Hz)";
+                                checked: mon.fps-counter;
+                                accent: accent;
+                                toggled(v) => { set-fps(v); }
+                            }
+                            Text {
+                                text: is-it ? "Visualizza il conteggio dei fotogrammi e la cadenza di aggiornamento sopra qualsiasi finestra senza bloccare il cursore." : "Displays live compositor refresh cadence over any window cleanly without capturing mouse input.";
+                                color: #9098aa; font-size: 11px; wrap: word-wrap;
+                            }
+                        }
+
+                        if sub-tab == 3 : VerticalLayout {
+                            spacing: 12px;
+                            DwcToggleRow {
+                                title: is-it ? "Mostra allineamento multi-schermo (bordi e centro)" : "Show Multi-Display Alignment Guides";
+                                checked: mon.alignment-grid;
+                                accent: accent;
+                                toggled(v) => { set-alignment(v); }
+                            }
+                            Text {
+                                text: is-it ? "Traccia mirini di calibrazione ai quattro lati dello schermo per allineare fisicamente più monitor affiancati." : "Draws precision alignment marks along all four edges for aligning multi-monitor bezels.";
+                                color: #9098aa; font-size: 11px; wrap: word-wrap;
+                            }
+                        }
+                    }
+
+                    // Right: Imposta la posizione di GamePlus (D-Pad)
+                    VerticalLayout {
+                        width: 220px;
+                        alignment: center;
+                        spacing: 12px;
+
+                        Text {
+                            text: is-it ? "Imposta la posizione di GamePlus" : "Adjust GamePlus Position";
+                            color: accent;
+                            font-size: 12px;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                        }
+
+                        // Up
+                        HorizontalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 46px; height: 46px; border-radius: 23px;
+                                background: up-ta.pressed ? #f0cda0 : (up-ta.has-hover ? #e0b983 : accent);
+                                Text { text: "▲"; color: #161411; font-size: 16px; horizontal-alignment: center; vertical-alignment: center; }
+                                up-ta := TouchArea { mouse-cursor: pointer; clicked => { nudge-position(1); } }
+                            }
+                        }
+
+                        // Left / Center / Right
+                        HorizontalLayout {
+                            alignment: center;
+                            spacing: 14px;
+                            Rectangle {
+                                width: 46px; height: 46px; border-radius: 23px;
+                                background: left-ta.pressed ? #f0cda0 : (left-ta.has-hover ? #e0b983 : accent);
+                                Text { text: "◀"; color: #161411; font-size: 16px; horizontal-alignment: center; vertical-alignment: center; }
+                                left-ta := TouchArea { mouse-cursor: pointer; clicked => { nudge-position(3); } }
+                            }
+                            Rectangle {
+                                width: 32px; height: 32px; y: 7px; border-radius: 16px;
+                                border-width: 1px; border-color: #3d4352;
+                                background: rst-ta.has-hover ? #282c36 : #1b1d24;
+                                Text { text: "⌖"; color: #cfd4e0; font-size: 14px; horizontal-alignment: center; vertical-alignment: center; }
+                                rst-ta := TouchArea { mouse-cursor: pointer; clicked => { nudge-position(0); } }
+                            }
+                            Rectangle {
+                                width: 46px; height: 46px; border-radius: 23px;
+                                background: right-ta.pressed ? #f0cda0 : (right-ta.has-hover ? #e0b983 : accent);
+                                Text { text: "▶"; color: #161411; font-size: 16px; horizontal-alignment: center; vertical-alignment: center; }
+                                right-ta := TouchArea { mouse-cursor: pointer; clicked => { nudge-position(4); } }
+                            }
+                        }
+
+                        // Down
+                        HorizontalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 46px; height: 46px; border-radius: 23px;
+                                background: down-ta.pressed ? #f0cda0 : (down-ta.has-hover ? #e0b983 : accent);
+                                Text { text: "▼"; color: #161411; font-size: 16px; horizontal-alignment: center; vertical-alignment: center; }
+                                down-ta := TouchArea { mouse-cursor: pointer; clicked => { nudge-position(2); } }
+                            }
+                        }
+
+                        Text {
+                            text: "Offset: (" + offset-x + ", " + offset-y + ") px";
+                            color: #8f96a8;
+                            font-size: 11px;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component MultiScreenView inherits Rectangle {
+    in property <bool> is-it: true;
+    in property <int> active-monitor-idx: 0;
+    in property <[UiWindowEntry]> windows;
+    in property <color> accent: #d4a86c;
+
+    callback refresh-windows;
+    callback snap-window(string /* hwnd-str */, string /* layout-id */, int /* zone-idx */);
+
+    property <string> selected-layout: "cols_2";
+    property <int> selected-zone: 0;
+
+    function zone-count(lid: string) -> int {
+        if (lid == "cols_2" || lid == "rows_2") { return 2; }
+        if (lid == "cols_3" || lid == "focus_1_2") { return 3; }
+        return 4;
+    }
+
+    VerticalLayout {
+        spacing: 12px;
+        padding: 4px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            VerticalLayout {
+                spacing: 2px;
+                Text { text: "MultiScreen"; color: #f3f4f7; font-size: 18px; font-weight: 700; }
+                Text { text: is-it ? "Suddivisione finestre sullo schermo selezionato" : "Snap windows cleanly onto the active display"; color: accent; font-size: 12px; }
+            }
+            DwcButton { label: is-it ? "Aggiorna Finestre" : "Refresh Windows"; accent: accent; clicked => { refresh-windows(); } }
+        }
+
+        // Layout Selector
+        HorizontalLayout {
+            spacing: 10px;
+            for lay in [
+                { id: "cols_2", it: "2 Colonne", en: "2 Columns" },
+                { id: "cols_3", it: "3 Colonne", en: "3 Columns" },
+                { id: "focus_1_2", it: "Focus 1+2", en: "Focus 1+2" },
+                { id: "grid_2x2", it: "Griglia 2×2", en: "2×2 Grid" },
+                { id: "rows_2", it: "Sopra/Sotto", en: "Top/Bottom" },
+            ] : Rectangle {
+                height: 44px;
+                horizontal-stretch: 1;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: selected-layout == lay.id ? accent : #2a2e3a;
+                background: selected-layout == lay.id ? accent.with-alpha(0.18) : #181a20;
+                Text {
+                    text: is-it ? lay.it : lay.en;
+                    color: selected-layout == lay.id ? accent : #e2e5ed;
+                    font-size: 12px; font-weight: 600;
+                    horizontal-alignment: center; vertical-alignment: center;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        selected-layout = lay.id;
+                        if (selected-zone >= zone-count(lay.id)) { selected-zone = 0; }
+                    }
+                }
+            }
+        }
+
+        // Target Zone Chips
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: is-it ? "Zona di destinazione:" : "Target Zone:"; color: #c4c9d4; font-size: 12px; vertical-alignment: center; }
+            for z in [0, 1, 2, 3] : DwcButton {
+                visible: z < zone-count(selected-layout);
+                label: (is-it ? "Zona " : "Zone ") + (z + 1);
+                active: selected-zone == z;
+                accent: accent;
+                clicked => { selected-zone = z; }
+            }
+        }
+
+        // Open Windows List
+        DwcCard {
+            vertical-stretch: 1;
+            ScrollView {
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 8px;
+                    if windows.length == 0 : Text {
+                        text: is-it ? "Premi Aggiorna Finestre per vedere le applicazioni aperte." : "Click Refresh Windows to list running windows.";
+                        color: #8c93a4; font-size: 12px;
+                    }
+                    for win in windows : Rectangle {
+                        height: 44px;
+                        border-radius: 8px;
+                        background: wta.has-hover ? #222530 : #14161c;
+                        border-width: 1px;
+                        border-color: wta.has-hover ? accent.with-alpha(0.5) : #242834;
+                        HorizontalLayout {
+                            padding-left: 12px; padding-right: 12px; spacing: 10px;
+                            Rectangle {
+                                width: 88px; height: 22px; y: 11px; border-radius: 4px; background: #262a36;
+                                Text { text: win.exe-name; color: accent; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                            }
+                            Text { text: win.title; color: #e8eaf0; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                            Text { text: is-it ? ("Ancora → Z" + (selected-zone + 1)) : ("Snap → Z" + (selected-zone + 1)); color: accent; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                        }
+                        wta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { snap-window(win.hwnd-str, selected-layout, selected-zone); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component HotkeysView inherits Rectangle {
+    in property <bool> is-it: true;
+    in property <bool> hotkeys-enabled: true;
+    in property <[UiHotkeyItem]> items;
+    in property <color> accent: #d4a86c;
+
+    callback toggle-global(bool);
+    callback toggle-item(int, bool);
+    callback update-shortcut(int, string);
+
+    property <int> editing-id: -1;
+    property <string> draft-shortcut: "";
+
+    VerticalLayout {
+        spacing: 12px;
+        padding: 4px;
+
+        Text { text: is-it ? "Tasto di scelta rapida" : "Global Hotkeys"; color: #f3f4f7; font-size: 18px; font-weight: 700; }
+        DwcToggleRow {
+            title: is-it ? "Abilita scorciatoie globali di Windows (anche minimizzato)" : "Enable global Windows hotkeys (works when minimized)";
+            checked: hotkeys-enabled;
+            accent: accent;
+            toggled(v) => { toggle-global(v); }
+        }
+
+        DwcCard {
+            vertical-stretch: 1;
+            ScrollView {
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 8px;
+                    for hk in items : Rectangle {
+                        height: editing-id == hk.id ? 86px : 46px;
+                        border-radius: 8px;
+                        background: #14161c;
+                        border-width: 1px;
+                        border-color: hk.enabled ? #2b303e : #20232c;
+                        VerticalLayout {
+                            padding-left: 12px; padding-right: 12px; padding-top: 8px; spacing: 8px;
+                            HorizontalLayout {
+                                spacing: 10px;
+                                height: 30px;
+                                Text {
+                                    text: is-it ? hk.label-it : hk.label-en;
+                                    color: hk.enabled ? #eceef4 : #777e90;
+                                    font-size: 12px; font-weight: 600;
+                                    vertical-alignment: center; horizontal-stretch: 1;
+                                }
+                                Rectangle {
+                                    width: 132px; height: 26px; border-radius: 6px;
+                                    background: #222632; border-width: 1px; border-color: accent.with-alpha(0.45);
+                                    Text { text: hk.shortcut; color: accent; font-size: 11px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            editing-id = editing-id == hk.id ? -1 : hk.id;
+                                            draft-shortcut = hk.shortcut;
+                                        }
+                                    }
+                                }
+                                DwcButton {
+                                    label: hk.enabled ? (is-it ? "Attivo" : "On") : "Off";
+                                    active: hk.enabled;
+                                    accent: accent;
+                                    clicked => { toggle-item(hk.id, !hk.enabled); }
+                                }
+                            }
+                            if editing-id == hk.id : HorizontalLayout {
+                                spacing: 8px;
+                                height: 32px;
+                                LineEdit {
+                                    horizontal-stretch: 1;
+                                    text <=> draft-shortcut;
+                                    placeholder-text: "Ctrl + Alt + F1";
+                                }
+                                DwcButton {
+                                    label: is-it ? "Applica" : "Save";
+                                    active: true;
+                                    accent: accent;
+                                    clicked => {
+                                        update-shortcut(hk.id, draft-shortcut);
+                                        editing-id = -1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component AppTweakerView inherits Rectangle {
+    in property <bool> is-it: true;
+    in property <bool> tweaker-enabled: false;
+    in property <bool> power-saving-mode: false;
+    in property <[UiWindowEntry]> running-apps;
+    in property <[UiAppRule]> rules;
+    in property <color> accent: #d4a86c;
+
+    callback toggle-tweaker(bool);
+    callback refresh-apps;
+    callback add-rule(string, string, int, int, int, int, int);
+    callback remove-rule(int);
+    callback toggle-rule(int, bool);
+
+    property <string> draft-exe: "";
+    property <string> draft-name: "";
+    property <int> draft-mode: 2; // FPS default for gaming rule
+    property <int> draft-bright: -1;
+
+    VerticalLayout {
+        spacing: 12px;
+        padding: 4px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            VerticalLayout {
+                spacing: 2px;
+                Text { text: "App Tweaker"; color: #f3f4f7; font-size: 18px; font-weight: 700; }
+                Text { text: is-it ? "Cambio automatico profilo monitor per ogni applicazione" : "Auto-switch GameVisual profile when launching apps"; color: accent; font-size: 12px; }
+            }
+            DwcButton { label: is-it ? "Rileva App Aperte" : "Scan Open Apps"; accent: accent; clicked => { refresh-apps(); } }
+        }
+
+        DwcToggleRow {
+            title: is-it ? "Attiva rilevamento automatico finestra in primo piano" : "Enable automatic foreground app profile switching";
+            checked: tweaker-enabled && !power-saving-mode;
+            enabled: !power-saving-mode;
+            accent: accent;
+            toggled(v) => { toggle-tweaker(v); }
+        }
+
+        // Quick Add Card
+        DwcCard {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+                Text { text: is-it ? "Nuova regola applicazione (.exe)" : "New Application Rule (.exe)"; color: accent; font-size: 12px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    LineEdit { horizontal-stretch: 1; text <=> draft-exe; placeholder-text: "es. valorant.exe, code.exe, vlc.exe"; }
+                    DwcButton {
+                        label: is-it ? "Aggiungi Regola" : "Add Rule";
+                        active: draft-exe != "";
+                        accent: accent;
+                        clicked => {
+                            if (draft-exe != "") {
+                                add-rule(draft-exe, draft-name != "" ? draft-name : draft-exe, draft-mode, draft-bright, -1, -1, -1);
+                                draft-exe = "";
+                                draft-name = "";
+                            }
+                        }
+                    }
+                }
+                DwcChipSelector {
+                    title: "GameVisual:";
+                    labels: ["RTS", "FPS", "Cinema", "Scenario", "Gara", "sRGB", "MOBA"];
+                    values: [1, 2, 3, 4, 5, 6, 7];
+                    selected-value: draft-mode;
+                    accent: accent;
+                    selected(v) => { draft-mode = v; }
+                }
+                if running-apps.length > 0 : HorizontalLayout {
+                    spacing: 6px;
+                    Text { text: is-it ? "App aperte:" : "Open:"; color: #8c93a4; font-size: 11px; vertical-alignment: center; }
+                    for w[idx] in running-apps : Rectangle {
+                        visible: idx < 5;
+                        height: 24px; border-radius: 6px; background: #222632; border-width: 1px; border-color: #343949;
+                        HorizontalLayout {
+                            padding-left: 8px; padding-right: 8px;
+                            Text { text: w.exe-name; color: #dbe0ec; font-size: 10px; vertical-alignment: center; }
+                        }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { draft-exe = w.exe-name; draft-name = w.title; }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Active Rules List
+        DwcCard {
+            vertical-stretch: 1;
+            ScrollView {
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 8px;
+                    for r in rules : Rectangle {
+                        height: 44px;
+                        border-radius: 8px;
+                        background: #14161c;
+                        border-width: 1px;
+                        border-color: r.enabled ? #2d3342 : #1f222a;
+                        HorizontalLayout {
+                            padding-left: 12px; padding-right: 10px; spacing: 10px;
+                            Text { text: r.exe-name; color: accent; font-size: 12px; font-weight: 700; vertical-alignment: center; width: 150px; overflow: elide; }
+                            Text { text: "GameVisual #" + r.gamevisual-mode; color: #dde0e7; font-size: 11px; vertical-alignment: center; horizontal-stretch: 1; }
+                            DwcButton { label: r.enabled ? "On" : "Off"; active: r.enabled; accent: accent; clicked => { toggle-rule(r.index, !r.enabled); } }
+                            DwcButton { label: "✕"; accent: #f43f5e; clicked => { remove-rule(r.index); } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component AiAssistantView inherits Rectangle {
+    in property <bool> is-it: true;
+    in property <bool> ai-visual-active: false;
+    in property <bool> ai-night-schedule: false;
+    in property <string> ai-detected-scene: "Desktop";
+    in property <int> ai-avg-luma: 128;
+    in property <int> ai-dark-pct: 20;
+    in property <int> night-start: 21;
+    in property <int> night-end: 7;
+    in property <string> last-ai-feedback: "";
+    in property <color> accent: #d4a86c;
+
+    callback toggle-ai-visual(bool);
+    callback toggle-night-schedule(bool);
+    callback set-night-hours(int, int);
+    callback run-command(string);
+
+    property <string> command-text: "";
+
+    VerticalLayout {
+        spacing: 12px;
+        padding: 4px;
+
+        Text { text: is-it ? "Assistente IA" : "AI Assistant"; color: #f3f4f7; font-size: 18px; font-weight: 700; }
+
+        DwcCard {
+            VerticalLayout {
+                padding: 16px;
+                spacing: 10px;
+                Text { text: is-it ? "Motore AI Visual & Telemetria Scena" : "AI Visual Engine & Scene Telemetry"; color: accent; font-size: 13px; font-weight: 700; }
+                DwcToggleRow {
+                    title: is-it ? "Attiva AI Visual automatico (adatta GameVisual in base ai contenuti)" : "Enable AI Visual auto-switching (adapts to screen content)";
+                    checked: ai-visual-active;
+                    accent: accent;
+                    toggled(v) => { toggle-ai-visual(v); }
+                }
+                HorizontalLayout {
+                    spacing: 12px;
+                    for stat in [
+                        { it: "Scena Rilevata", en: "Detected Scene", val: ai-detected-scene },
+                        { it: "Luminanza Media", en: "Avg Luma", val: "" + ai-avg-luma + "/255" },
+                        { it: "Aree Scure", en: "Dark Pixels", val: "" + ai-dark-pct + "%" },
+                    ] : Rectangle {
+                        height: 52px; horizontal-stretch: 1; border-radius: 8px; background: #14161c; border-width: 1px; border-color: #252934;
+                        VerticalLayout {
+                            padding: 8px;
+                            Text { text: is-it ? stat.it : stat.en; color: #8c93a5; font-size: 10px; }
+                            Text { text: stat.val; color: accent; font-size: 13px; font-weight: 700; overflow: elide; }
+                        }
+                    }
+                }
+            }
+        }
+
+        DwcCard {
+            VerticalLayout {
+                padding: 16px;
+                spacing: 10px;
+                Text { text: is-it ? "Pianificazione Cura Notturna (Filtro Luce Blu)" : "Night Care Schedule (Auto Blue Light)"; color: accent; font-size: 13px; font-weight: 700; }
+                DwcToggleRow {
+                    title: is-it ? ("Attiva filtro luce blu automatico (" + night-start + ":00 – " + night-end + ":00)") : ("Auto Blue Light filter schedule (" + night-start + ":00 – " + night-end + ":00)");
+                    checked: ai-night-schedule;
+                    accent: accent;
+                    toggled(v) => { toggle-night-schedule(v); }
+                }
+            }
+        }
+
+        DwcCard {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 10px;
+                Text { text: is-it ? "Comandi Istantanei IA (linguaggio naturale IT/EN)" : "Instant AI Command Bar (IT/EN)"; color: accent; font-size: 13px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    LineEdit {
+                        horizontal-stretch: 1;
+                        text <=> command-text;
+                        placeholder-text: is-it ? "es. 'imposta luminosità 70 e modalità cinema' oppure 'attiva hdr'" : "e.g. 'set brightness 70 and fps mode'";
+                        accepted => {
+                            if (command-text != "") {
+                                run-command(command-text);
+                                command-text = "";
+                            }
+                        }
+                    }
+                    DwcButton {
+                        label: is-it ? "Esegui" : "Run";
+                        active: command-text != "";
+                        accent: accent;
+                        clicked => {
+                            if (command-text != "") {
+                                run-command(command-text);
+                                command-text = "";
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    DwcButton { label: is-it ? "Notte / Eye Care" : "Night Eye Care"; accent: accent; clicked => { run-command("notte filtro luce blu 3"); } }
+                    DwcButton { label: "FPS Pro"; accent: accent; clicked => { run-command("modalità fps"); } }
+                    DwcButton { label: "sRGB Studio"; accent: accent; clicked => { run-command("modalità srgb"); } }
+                    DwcButton { label: "Cinema HDR"; accent: accent; clicked => { run-command("modalità cinema attiva hdr"); } }
+                }
+                if last-ai-feedback != "" : Text {
+                    text: "✓ " + last-ai-feedback;
+                    color: #34d399;
+                    font-size: 12px;
+                }
+            }
+        }
+    }
+}

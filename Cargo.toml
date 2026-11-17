@@ -1,12 +1,12 @@
 [package]
 name = "monitor-manager"
-version = "1.0.15"
+version = "1.0.16"
 edition = "2021"
 description = "Ultra-Lightweight Native DDC/CI Monitor Manager"
 authors = ["Riccardo Bettini"]
 
 [package.metadata.monitor_manager]
-display_version = "1.15"
+display_version = "1.16"
 github_repo = "riccardo-bettini/Monitor-Manager"
 
 [[bin]]
@@ -60,6 +60,9 @@ windows-sys = { version = "0.59", features = [
 
 [build-dependencies]
 slint-build = "1.9"
+
+[profile.dev]
+debug = 0
 
 [profile.release]
 opt-level = "z"
