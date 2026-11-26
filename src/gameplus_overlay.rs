@@ -221,6 +221,7 @@ pub struct OverlayConfig {
     pub timer_mode: u32,       // 0=Off, 1=30m, 2=40m, 3=50m, 4=60m, 5=90m, 6=Stopwatch
     pub timer_paused: bool,
     pub fps_counter: bool,
+    pub fps_corner: u32,       // 0=Default Top-Left, 1=Top-Left, 2=Top-Right, 3=Bottom-Left, 4=Bottom-Right
     pub alignment_grid: bool,
     pub offset_x: i32,
     pub offset_y: i32,
@@ -235,6 +236,7 @@ impl Default for OverlayConfig {
             timer_mode: 0,
             timer_paused: false,
             fps_counter: false,
+            fps_corner: 0,
             alignment_grid: false,
             offset_x: 0,
             offset_y: 0,
@@ -723,9 +725,19 @@ fn render_overlay_frame(
         let txt = format!("{} FPS", fps_val);
         let bw = (txt.len() as i32) * 18 + 26;
         let bh = 38;
-        fill_rect(buf, w, h, hud_x - 1, hud_y - 1, bw + 2, bh + 2, badge_border);
-        fill_rect(buf, w, h, hud_x, hud_y, bw, bh, badge_bg);
-        draw_text_5x7(buf, w, h, hud_x + 13, hud_y + 9, 3, &txt, text_green);
+        let margin = 22;
+        let (fx, fy) = match cfg.fps_corner {
+            1 => (margin, margin),
+            2 => (w - bw - margin, margin),
+            3 => (margin, h - bh - margin),
+            4 => (w - bw - margin, h - bh - margin),
+            _ => (hud_x, hud_y),
+        };
+        let fx = (fx + cfg.offset_x).clamp(8, (w - bw - 8).max(8));
+        let fy = (fy + cfg.offset_y).clamp(8, (h - bh - 8).max(8));
+        fill_rect(buf, w, h, fx - 1, fy - 1, bw + 2, bh + 2, badge_border);
+        fill_rect(buf, w, h, fx, fy, bw, bh, badge_bg);
+        draw_text_5x7(buf, w, h, fx + 13, fy + 9, 3, &txt, text_green);
     }
 
     let _ = put_px;
@@ -744,6 +756,7 @@ mod tests {
             timer_mode: 1,
             timer_paused: false,
             fps_counter: true,
+            fps_corner: 4,
             alignment_grid: true,
             offset_x: 0,
             offset_y: 0,

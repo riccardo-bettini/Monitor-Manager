@@ -2963,7 +2963,7 @@ dependencies = [
 
 [[package]]
 name = "monitor-manager"
-version = "1.0.16"
+version = "1.0.17"
 dependencies = [
  "ddc",
  "ddc-hi",

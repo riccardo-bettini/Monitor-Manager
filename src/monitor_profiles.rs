@@ -130,8 +130,15 @@ pub fn collect_probe_codes(
             set.insert(c);
         }
     } else if b.contains("AOC") || m == "AOC" {
-        // AOC Gaming: Game Mode (0xDC), LowBlue / Shadow Control / Game Color / Overdrive / MBR
-        for c in [0xE0u8, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE8, 0xEC, 0xEE, 0xF0] {
+        // AOC Gaming: Eco/Game Mode (0xDC), Gamma (0x72), Scaling (0x86), Sharpness (0x87),
+        // Saturation (0x8A), Mute (0x8D), e range vendor-specific (0xE0..=0xFF) incluso DCR (0xED)
+        set.insert(0x72);
+        set.insert(0x86);
+        set.insert(0x87);
+        set.insert(0x8A);
+        set.insert(0x8D);
+        set.insert(0xDC);
+        for c in 0xE0u8..=0xFF {
             set.insert(c);
         }
     } else if b.contains("PHILIPS") || m == "PHL" {
@@ -238,7 +245,11 @@ fn friendly_category_and_names(code: u8, brand: &str) -> Option<(&'static str, &
                 match code {
                     0xE1 => ("gaming", "AOC LowBlue Mode", "AOC LowBlue Mode"),
                     0xE2 => ("gaming", "AOC Overdrive", "AOC Overdrive"),
+                    0xE3 => ("gaming", "AOC Modalità Gioco", "AOC Game Mode"),
+                    0xE4 => ("color", "AOC DCB Mode", "AOC DCB Mode"),
                     0xE6 => ("gaming", "AOC Shadow Control", "AOC Shadow Control"),
+                    0xED => ("image", "AOC DCR (Contrasto Dinamico)", "AOC DCR (Dynamic Contrast)"),
+                    0xF8 => ("gaming", "AOC Selettore (Dial Point)", "AOC Dial Point"),
                     _ => return None,
                 }
             } else if is_philips {
@@ -294,6 +305,7 @@ fn default_options_for_code(code: u8, brand: &str) -> Vec<VcpValueOption> {
             VcpValueOption { value: 11, label: "User".to_string() },
         ],
         0x60 => vec![
+            VcpValueOption { value: 1, label: "VGA_ANALOG".to_string() },
             VcpValueOption { value: 15, label: "DisplayPort 1".to_string() },
             VcpValueOption { value: 16, label: "DisplayPort 2".to_string() },
             VcpValueOption { value: 17, label: "HDMI 1".to_string() },
@@ -322,6 +334,16 @@ fn default_options_for_code(code: u8, brand: &str) -> Vec<VcpValueOption> {
                     VcpValueOption { value: 3, label: "Movie / Cinema".to_string() },
                     VcpValueOption { value: 4, label: "User / Racing".to_string() },
                     VcpValueOption { value: 5, label: "Games / FPS".to_string() },
+                ]
+            } else if b.contains("AOC") {
+                vec![
+                    VcpValueOption { value: 0x00, label: "Standard".to_string() },
+                    VcpValueOption { value: 0x0B, label: "Testo".to_string() },
+                    VcpValueOption { value: 0x0C, label: "Internet".to_string() },
+                    VcpValueOption { value: 0x0D, label: "Gioco".to_string() },
+                    VcpValueOption { value: 0x0E, label: "Film".to_string() },
+                    VcpValueOption { value: 0x0F, label: "Sport".to_string() },
+                    VcpValueOption { value: 0x10, label: "Lettura".to_string() },
                 ]
             } else if b.contains("PHILIPS") {
                 vec![

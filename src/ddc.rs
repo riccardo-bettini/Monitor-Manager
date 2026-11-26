@@ -3,8 +3,9 @@ use crate::monitor_profiles::{
     DiscoveredVcp,
 };
 use crate::win_display::{
-    apply_software_lut, query_hdr_map, query_refresh_rates, reset_software_lut, set_hdr_enabled,
-    set_refresh_rate, DisplayOsInfo, SoftwareLutSettings,
+    apply_software_lut, query_display_modes, query_hdr_map, query_refresh_rates, reset_software_lut,
+    set_display_mode, set_hdr_enabled, set_orientation, set_refresh_rate, DisplayOsInfo,
+    SoftwareLutSettings,
 };
 use ddc::Ddc;
 use serde::{Deserialize, Serialize};
@@ -92,6 +93,10 @@ pub struct MonitorInfo {
     pub software_lut: SoftwareLutSettings,
     #[serde(default)]
     pub asus: crate::asus_vcp::AsusMonitorState,
+    #[serde(default)]
+    pub serial_number: String,
+    #[serde(default)]
+    pub aoc: crate::aoc_vcp::AocMonitorState,
 }
 
 struct PhysicalHandleWrap(HANDLE);
@@ -365,31 +370,46 @@ impl DdcEngine {
                 .collect()
         };
 
-        // Anche ddc-hi può scoprire monitor extra o leggere capabilities quando Dxva2 standard fatica
-        let hi_caps_fallback: Vec<(String, String)> = std::panic::catch_unwind(|| {
-            ddc_hi::Display::enumerate()
-                .into_iter()
-                .filter_map(|mut d| {
-                    let label = format!(
-                        "{} {}",
-                        d.info.manufacturer_id.clone().unwrap_or_default(),
-                        d.info.model_name.clone().unwrap_or_else(|| d.info.id.clone())
-                    );
-                    d.handle
-                        .capabilities_string()
-                        .ok()
-                        .map(|bytes| (label.to_uppercase(), String::from_utf8_lossy(&bytes).into_owned()))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+        // Leggiamo prima le capabilities via Win32 Dxva2; ricorriamo a ddc-hi solo se qualche monitor non le espone
+        let mut initial_caps: HashMap<usize, String> = HashMap::new();
+        let mut any_missing_caps = false;
+        for &(id, h_int, _, _, _) in &targets {
+            let s = read_capabilities_string(h_int as HANDLE).unwrap_or_default();
+            if s.is_empty() {
+                any_missing_caps = true;
+            }
+            initial_caps.insert(id, s);
+        }
+
+        let hi_caps_fallback: Vec<(String, String)> = if any_missing_caps {
+            std::panic::catch_unwind(|| {
+                ddc_hi::Display::enumerate()
+                    .into_iter()
+                    .filter_map(|mut d| {
+                        let label = format!(
+                            "{} {}",
+                            d.info.manufacturer_id.clone().unwrap_or_default(),
+                            d.info.model_name.clone().unwrap_or_else(|| d.info.id.clone())
+                        );
+                        d.handle
+                            .capabilities_string()
+                            .ok()
+                            .map(|bytes| (label.to_uppercase(), String::from_utf8_lossy(&bytes).into_owned()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
         let mut joins = Vec::new();
         for (id, h_int, brand, model_code, _already_ddc) in targets {
             let fallback_pool = hi_caps_fallback.clone();
+            let pre_caps = initial_caps.remove(&id).unwrap_or_default();
             joins.push(thread::spawn(move || {
                 let h = h_int as HANDLE;
-                let mut raw_caps = read_capabilities_string(h).unwrap_or_default();
+                let mut raw_caps = pre_caps;
                 if raw_caps.is_empty() {
                     let b_up = brand.to_uppercase();
                     if let Some((_, s)) = fallback_pool
@@ -506,6 +526,13 @@ impl DdcEngine {
                     &raw_caps,
                     &asus_readings,
                 );
+                m.info.aoc = crate::aoc_vcp::resolve_aoc_state(
+                    &m.info.brand,
+                    &m.info.name,
+                    &m.info.serial_number,
+                    &raw_caps,
+                    &asus_readings,
+                );
             }
         }
         guard.iter().map(|m| m.info.clone()).collect()
@@ -530,6 +557,78 @@ impl DdcEngine {
                 if cur_hz > 0 {
                     m.info.resolution = format!("{} | {}Hz", base_res, cur_hz);
                 }
+            }
+        }
+        Ok(guard.iter().map(|m| m.info.clone()).collect())
+    }
+
+    pub fn set_monitor_display_mode(
+        &self,
+        monitor_id: usize,
+        width: u32,
+        height: u32,
+        hz: u32,
+    ) -> Result<Vec<MonitorInfo>, String> {
+        let gdi_device = {
+            let guard = self.monitors.lock().unwrap();
+            guard
+                .iter()
+                .find(|m| m.info.id == monitor_id)
+                .map(|m| m.info.gdi_device.clone())
+                .ok_or_else(|| "Monitor non trovato".to_string())?
+        };
+        set_display_mode(&gdi_device, width, height, hz)?;
+        let (cur_hz, avail) = query_refresh_rates(&gdi_device);
+        let (cur_w, cur_h, orient_deg, avail_modes) = query_display_modes(&gdi_device);
+        let mut guard = self.monitors.lock().unwrap();
+        if let Some(m) = guard.iter_mut().find(|m| m.info.id == monitor_id) {
+            m.info.os_info.current_refresh_rate = cur_hz;
+            m.info.os_info.available_refresh_rates = avail;
+            m.info.os_info.current_width = cur_w;
+            m.info.os_info.current_height = cur_h;
+            m.info.os_info.orientation_deg = orient_deg;
+            m.info.os_info.available_modes = avail_modes;
+            if cur_w > 0 && cur_h > 0 {
+                m.info.resolution = if cur_hz > 0 {
+                    format!("{}×{} | {}Hz", cur_w, cur_h, cur_hz)
+                } else {
+                    format!("{}×{}", cur_w, cur_h)
+                };
+            }
+        }
+        Ok(guard.iter().map(|m| m.info.clone()).collect())
+    }
+
+    pub fn set_monitor_orientation(
+        &self,
+        monitor_id: usize,
+        degrees: u32,
+    ) -> Result<Vec<MonitorInfo>, String> {
+        let gdi_device = {
+            let guard = self.monitors.lock().unwrap();
+            guard
+                .iter()
+                .find(|m| m.info.id == monitor_id)
+                .map(|m| m.info.gdi_device.clone())
+                .ok_or_else(|| "Monitor non trovato".to_string())?
+        };
+        set_orientation(&gdi_device, degrees)?;
+        let (cur_w, cur_h, orient_deg, avail_modes) = query_display_modes(&gdi_device);
+        let (cur_hz, avail) = query_refresh_rates(&gdi_device);
+        let mut guard = self.monitors.lock().unwrap();
+        if let Some(m) = guard.iter_mut().find(|m| m.info.id == monitor_id) {
+            m.info.os_info.current_width = cur_w;
+            m.info.os_info.current_height = cur_h;
+            m.info.os_info.orientation_deg = orient_deg;
+            m.info.os_info.available_modes = avail_modes;
+            m.info.os_info.current_refresh_rate = cur_hz;
+            m.info.os_info.available_refresh_rates = avail;
+            if cur_w > 0 && cur_h > 0 {
+                m.info.resolution = if cur_hz > 0 {
+                    format!("{}×{} | {}Hz", cur_w, cur_h, cur_hz)
+                } else {
+                    format!("{}×{}", cur_w, cur_h)
+                };
             }
         }
         Ok(guard.iter().map(|m| m.info.clone()).collect())
@@ -628,6 +727,9 @@ fn update_cached_vcp(info: &mut MonitorInfo, vcp_code: u8, value: u32) {
         crate::asus_vcp::vcp::GAME_VISUAL => {
             info.asus.gamevisual_mode =
                 crate::asus_vcp::GameVisualMode::from_vcp_value(value) as i32;
+            if info.aoc.is_aoc && info.aoc.eco_hw {
+                info.aoc.eco_mode = crate::aoc_vcp::AocMonitorState::eco_vcp_to_ui(value);
+            }
         }
         crate::asus_vcp::vcp::VARIABLE_OD => info.asus.variable_od = value,
         crate::asus_vcp::vcp::BLUE_LIGHT_FILTER => info.asus.blue_light_filter = value,
@@ -637,20 +739,43 @@ fn update_cached_vcp(info: &mut MonitorInfo, vcp_code: u8, value: u32) {
             if vcp_code == info.asus.shadow_boost_vcp {
                 info.asus.shadow_boost = value;
             }
+            if vcp_code == crate::aoc_vcp::vcp::OVERDRIVE && info.aoc.overdrive_hw {
+                info.aoc.overdrive = value as i32;
+            }
         }
         crate::asus_vcp::vcp::DYNAMIC_SHADOW_BOOST => {
             info.asus.dynamic_shadow_boost = value > 0;
         }
         crate::asus_vcp::vcp::FRAME_RATE_BOOST => {
             info.asus.frame_rate_boost = value > 0;
+            if info.aoc.low_blue_hw {
+                info.aoc.low_blue_mode = value as i32;
+            }
         }
         crate::asus_vcp::vcp::VRR_ENABLE => info.asus.vrr_enabled = value > 0,
-        crate::asus_vcp::vcp::ASPECT_CONTROL => info.asus.aspect_control = value,
+        crate::asus_vcp::vcp::ASPECT_CONTROL => {
+            info.asus.aspect_control = value;
+            info.aoc.image_ratio = value;
+        }
         crate::asus_vcp::vcp::COLOR_SPACE => info.asus.color_space = value,
         crate::asus_vcp::vcp::GAMEPLUS_CROSSHAIR => {
             info.asus.crosshair_style = info.asus.crosshair_vcp_to_ui(value);
         }
         crate::asus_vcp::vcp::GAMEPLUS_TIMER => info.asus.timer_preset = value,
+        crate::aoc_vcp::vcp::AUDIO_MUTE => info.aoc.audio_mute = value == 1,
+        crate::aoc_vcp::vcp::DCR => {
+            if info.aoc.dcr_hw {
+                info.aoc.dcr_enabled = value > 0;
+            }
+        }
+        crate::aoc_vcp::vcp::GAMMA => {
+            if info.aoc.gamma_hw {
+                info.aoc.gamma_mode = value as i32;
+            }
+        }
+        crate::aoc_vcp::vcp::INPUT_SOURCE => {
+            info.aoc.dsub_available = value == 1;
+        }
         _ => {}
     }
     let feature = match vcp_code {
@@ -714,6 +839,9 @@ fn readback_picture_and_asus(monitors_ref: &Arc<Mutex<Vec<ManagedMonitor>>>, mon
         VCP_SATURATION,
         VCP_VOLUME,
         VCP_INPUT_SOURCE,
+        crate::aoc_vcp::vcp::GAMMA,
+        crate::aoc_vcp::vcp::AUDIO_MUTE,
+        crate::aoc_vcp::vcp::DCR,
         crate::asus_vcp::vcp::ASPECT_CONTROL,
         crate::asus_vcp::vcp::GAME_VISUAL,
         crate::asus_vcp::vcp::VARIABLE_OD,
@@ -1031,6 +1159,7 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
 
     // Interroghiamo ogni monitor in parallelo su thread dedicati per dimezzare i tempi di avvio
     let wmi_panels = crate::wmi_brightness::query_wmi_panels();
+    let wmi_identities = crate::wmi_brightness::query_wmi_identities();
     let hdr_map = query_hdr_map();
     let mut join_handles = Vec::new();
     for (idx, (id, entry, raw_handle, desc)) in handles_to_probe.into_iter().enumerate() {
@@ -1041,11 +1170,24 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
             .unwrap_or_default();
         let hdr_entry = hdr_map.get(&entry.gdi_device).copied().unwrap_or((false, false));
         let handle_int = raw_handle as isize;
+        let serial_number = wmi_identities
+            .iter()
+            .find(|wid| {
+                (!edid_path.is_empty()
+                    && crate::wmi_brightness::matches_device_path(&wid.instance_name, &edid_path))
+                    || (!wid.model.is_empty()
+                        && edid
+                            .as_ref()
+                            .is_some_and(|e| e.friendly_name.eq_ignore_ascii_case(&wid.model)))
+            })
+            .map(|wid| wid.serial.clone())
+            .unwrap_or_default();
 
         join_handles.push(thread::spawn(move || {
             let h = handle_int as HANDLE;
             let (brand, name, model_code) = parse_brand_and_model(edid.as_ref(), &desc, idx);
             let (cur_hz, avail_hz) = query_refresh_rates(&entry.gdi_device);
+            let (cur_w, cur_h, orient_deg, avail_modes) = query_display_modes(&entry.gdi_device);
             let effective_hz = if cur_hz > 0 {
                 cur_hz
             } else {
@@ -1099,12 +1241,18 @@ fn enumerate_all_monitors() -> Vec<ManagedMonitor> {
                     available_refresh_rates: avail_hz,
                     hdr_supported: hdr_entry.0,
                     hdr_enabled: hdr_entry.1,
+                    current_width: cur_w,
+                    current_height: cur_h,
+                    orientation_deg: orient_deg,
+                    available_modes: avail_modes,
                 },
                 discovered_vcps: Vec::new(),
                 capabilities_raw: String::new(),
                 mccs_version: String::new(),
                 software_lut: SoftwareLutSettings::default(),
                 asus: crate::asus_vcp::AsusMonitorState::default(),
+                serial_number,
+                aoc: crate::aoc_vcp::AocMonitorState::default(),
             };
 
             (
@@ -1227,6 +1375,8 @@ mod tests {
                 mccs_version: String::new(),
                 software_lut: SoftwareLutSettings::default(),
                 asus: crate::asus_vcp::AsusMonitorState::default(),
+                serial_number: String::new(),
+                aoc: crate::aoc_vcp::AocMonitorState::default(),
             },
             handle: PhysicalHandleWrap(std::ptr::null_mut()),
         }

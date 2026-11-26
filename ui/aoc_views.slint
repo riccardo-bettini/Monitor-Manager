@@ -1,0 +1,1516 @@
+import { ScrollView, LineEdit } from "std-widgets.slint";
+import { UiMonitor, UiVcpOption, UiDisplayMode, UiAocProfileItem, UiAppRule } from "types.slint";
+
+component AocCard inherits Rectangle {
+    background: #181b22;
+    border-radius: 11px;
+    border-width: 1px;
+    border-color: #272b36;
+}
+
+component AocBadge inherits Rectangle {
+    in property <string> label: "HW";
+    in property <color> badge-color: #39d353;
+    height: 17px;
+    width: 28px;
+    border-radius: 4px;
+    background: badge-color.with-alpha(0.18);
+    border-width: 1px;
+    border-color: badge-color.with-alpha(0.55);
+
+    Text {
+        text: label;
+        color: badge-color;
+        font-size: 9px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component AocPillButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    in property <color> accent: #f05a46;
+    callback clicked;
+
+    height: 30px;
+    min-width: 72px;
+    border-radius: 7px;
+    border-width: 1px;
+    border-color: !enabled ? #242833 : (active ? accent : (ta.has-hover ? #4d5466 : #313644));
+    background: !enabled ? #14161b : (active ? accent.with-alpha(0.22) : (ta.has-hover ? #232834 : #1b1e26));
+    opacity: enabled ? 1.0 : 0.42;
+    animate background, border-color { duration: 110ms; }
+
+    Text {
+        text: label;
+        color: active ? #ffffff : #dce1ec;
+        font-size: 11px;
+        font-weight: active ? 700 : 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        x: 10px;
+        width: parent.width - 20px;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component AocRadioOption inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    in property <color> accent: #f05a46;
+    callback clicked;
+
+    height: 24px;
+    opacity: enabled ? 1.0 : 0.4;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: 7px;
+        alignment: start;
+
+        Rectangle {
+            width: 13px;
+            height: 13px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 6.5px;
+            border-width: 1.5px;
+            border-color: selected ? accent : #5c6478;
+            background: selected ? accent : transparent;
+
+            if selected : Rectangle {
+                width: 5px;
+                height: 5px;
+                x: 4px;
+                y: 4px;
+                border-radius: 2.5px;
+                background: #ffffff;
+            }
+        }
+
+        Text {
+            text: label;
+            color: selected ? #ffffff : #c4cad8;
+            font-size: 11px;
+            font-weight: selected ? 700 : 500;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component AocCheckOption inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked: false;
+    in property <bool> enabled: true;
+    in property <color> accent: #f05a46;
+    callback toggled(bool);
+
+    height: 24px;
+    opacity: enabled ? 1.0 : 0.4;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: start;
+
+        Rectangle {
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 3.5px;
+            border-width: 1.5px;
+            border-color: checked ? accent : #5c6478;
+            background: checked ? accent : #14161c;
+
+            if checked : Text {
+                text: "✓";
+                color: #ffffff;
+                font-size: 9.5px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: label;
+            color: checked ? #ffffff : #c4cad8;
+            font-size: 11px;
+            font-weight: checked ? 700 : 500;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.toggled(!root.checked); }
+    }
+}
+
+component AocSliderRow inherits Rectangle {
+    in property <string> title;
+    in-out property <int> value: 50;
+    in property <int> maximum: 100;
+    in property <string> badge-text: "HW";
+    in property <color> badge-color: #39d353;
+    in property <color> accent: #f05a46;
+    in property <bool> enabled: true;
+    callback changed(int);
+
+    height: 36px;
+    opacity: enabled ? 1.0 : 0.4;
+
+    property <int> safe-max: Math.max(1, maximum);
+    property <int> clamped: Math.max(0, Math.min(safe-max, value));
+
+    VerticalLayout {
+        spacing: 3px;
+        HorizontalLayout {
+            alignment: space-between;
+            HorizontalLayout {
+                spacing: 6px;
+                Text {
+                    text: title;
+                    color: #e4e8f2;
+                    font-size: 11.5px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                AocBadge {
+                    y: (parent.height - self.height) / 2;
+                    label: badge-text;
+                    badge-color: badge-color;
+                }
+            }
+            Text {
+                text: clamped;
+                color: #ffffff;
+                font-size: 11.5px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            height: 14px;
+            Rectangle {
+                x: 0;
+                y: 5px;
+                width: parent.width;
+                height: 4px;
+                border-radius: 2px;
+                background: #2b303c;
+            }
+            Rectangle {
+                x: 0;
+                y: 5px;
+                width: Math.max(6px, parent.width * (clamped / safe-max));
+                height: 4px;
+                border-radius: 2px;
+                background: accent;
+            }
+            Rectangle {
+                x: (parent.width - 12px) * (clamped / safe-max);
+                y: 1px;
+                width: 12px;
+                height: 12px;
+                border-radius: 6px;
+                background: #ffffff;
+                border-width: 2px;
+                border-color: accent;
+            }
+
+            ta := TouchArea {
+                enabled: root.enabled;
+                mouse-cursor: pointer;
+                function apply-x(px: length) {
+                    let ratio = Math.max(0.0, Math.min(1.0, (px - 6px) / Math.max(1px, parent.width - 12px)));
+                    let v = Math.round(ratio * safe-max);
+                    if (v != value) {
+                        value = v;
+                        changed(v);
+                    }
+                }
+                pointer-event(ev) => {
+                    if (ev.kind == PointerEventKind.down) {
+                        apply-x(self.mouse-x);
+                    }
+                }
+                moved => {
+                    if (self.pressed) {
+                        apply-x(self.mouse-x);
+                    }
+                }
+            }
+        }
+    }
+}
+
+component AocTileCard inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle: "";
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    in property <color> accent: #f05a46;
+    callback clicked;
+
+    height: 102px;
+    border-radius: 10px;
+    border-width: 1.5px;
+    border-color: !enabled ? #232732 : (selected ? accent : (ta.has-hover ? #4d5466 : #2d323e));
+    background: !enabled ? #14161c : (selected ? accent.with-alpha(0.24) : (ta.has-hover ? #242936 : #1e222b));
+    opacity: enabled ? 1.0 : 0.42;
+    animate background, border-color { duration: 120ms; }
+
+    VerticalLayout {
+        padding: 12px;
+        alignment: center;
+        spacing: 6px;
+
+        Text {
+            text: title;
+            color: selected ? #ffffff : #e2e6f0;
+            font-size: 14px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        if subtitle != "" : Text {
+            text: subtitle;
+            color: selected ? #f3d6cf : #949cb0;
+            font-size: 9.5px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ============================================================================
+// HEADER PROFILO + FOOTER ANNULLA / APPLICA / RIPRISTINA (CONDIVISI AOC)
+// ============================================================================
+export component AocProfileHeader inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <bool> is-it: true;
+    in property <[UiAocProfileItem]> profiles;
+    in property <string> active-profile-id;
+    in property <color> accent: #f05a46;
+
+    callback select-profile(string);
+    callback create-profile(string);
+    callback rename-profile(string, string);
+    callback import-profile;
+    callback export-profile;
+
+    property <bool> show-profile-mgr: false;
+    property <string> draft-name: "";
+
+    height: show-profile-mgr ? 116px : 62px;
+    background: #1a1d25;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: #2a2f3c;
+    animate height { duration: 150ms; }
+
+    VerticalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            spacing: 10px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: is-it ? "PROFILO" : "PROFILE";
+                    color: #ffffff;
+                    font-size: 13px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
+                for p in profiles : AocPillButton {
+                    y: (parent.height - self.height) / 2;
+                    label: p.name;
+                    active: p.id == active-profile-id;
+                    accent: accent;
+                    clicked => { select-profile(p.id); }
+                }
+                AocPillButton {
+                    y: (parent.height - self.height) / 2;
+                    label: "•••";
+                    active: show-profile-mgr;
+                    accent: accent;
+                    clicked => { show-profile-mgr = !show-profile-mgr; }
+                }
+                AocPillButton {
+                    y: (parent.height - self.height) / 2;
+                    label: is-it ? "Importa" : "Import";
+                    accent: accent;
+                    clicked => { import-profile(); }
+                }
+                AocPillButton {
+                    y: (parent.height - self.height) / 2;
+                    label: is-it ? "Esporta" : "Export";
+                    accent: accent;
+                    clicked => { export-profile(); }
+                }
+            }
+
+            Rectangle {
+                height: 28px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 6px;
+                background: #242935;
+                border-width: 1px;
+                border-color: #353b4a;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    Text {
+                        text: mon.name;
+                        color: #dce2ee;
+                        font-size: 11px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        if show-profile-mgr : HorizontalLayout {
+            spacing: 8px;
+            height: 32px;
+            LineEdit {
+                horizontal-stretch: 1;
+                text <=> draft-name;
+                placeholder-text: is-it ? "Nome nuovo profilo o rinomina attuale..." : "New profile name or rename current...";
+            }
+            AocPillButton {
+                label: is-it ? "+ Crea" : "+ New";
+                active: draft-name != "";
+                accent: accent;
+                clicked => {
+                    if (draft-name != "") {
+                        create-profile(draft-name);
+                        draft-name = "";
+                    }
+                }
+            }
+            AocPillButton {
+                label: is-it ? "Rinomina" : "Rename";
+                enabled: draft-name != "";
+                accent: accent;
+                clicked => {
+                    if (draft-name != "") {
+                        rename-profile(active-profile-id, draft-name);
+                        draft-name = "";
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component AocActionFooter inherits Rectangle {
+    in property <bool> is-it: true;
+    in property <color> accent: #f05a46;
+    callback cancel-changes;
+    callback save-profile;
+    callback reset-all;
+
+    height: 46px;
+    border-radius: 10px;
+    background: #1a1d25;
+    border-width: 1px;
+    border-color: #2a2f3c;
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        alignment: center;
+        spacing: 16px;
+
+        AocPillButton {
+            y: (parent.height - self.height) / 2;
+            min-width: 120px;
+            label: is-it ? "ANNULLA" : "CANCEL";
+            accent: accent;
+            clicked => { cancel-changes(); }
+        }
+        AocPillButton {
+            y: (parent.height - self.height) / 2;
+            min-width: 120px;
+            label: is-it ? "APPLICA / SALVA" : "APPLY / SAVE";
+            active: true;
+            accent: accent;
+            clicked => { save-profile(); }
+        }
+        AocPillButton {
+            y: (parent.height - self.height) / 2;
+            min-width: 120px;
+            label: is-it ? "RIPRISTINA" : "RESET";
+            accent: accent;
+            clicked => { reset-all(); }
+        }
+    }
+}
+
+// ============================================================================
+// 1. MODALITÀ GIOCO + AVANZATE (SCHERMATE 1, 2, 4)
+// ============================================================================
+export component AocGameModeView inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <bool> is-it: true;
+    in property <[UiAocProfileItem]> profiles;
+    in property <string> active-profile-id;
+    in property <color> accent: #f05a46;
+
+    callback select-profile(string);
+    callback create-profile(string);
+    callback rename-profile(string, string);
+    callback import-profile;
+    callback export-profile;
+    callback set-game-mode(int);
+    callback select-adv-slot(int);
+    callback set-setting(string, int);
+    callback open-game-sync;
+    callback cancel-changes;
+    callback save-profile;
+    callback reset-all;
+
+    property <bool> show-advanced: false;
+    property <int> adv-slot: 7; // 4=G1, 5=G2, 6=G3, 7=Personalizza
+
+    VerticalLayout {
+        spacing: 12px;
+
+        AocProfileHeader {
+            mon: mon;
+            is-it: is-it;
+            profiles: profiles;
+            active-profile-id: active-profile-id;
+            accent: accent;
+            select-profile(id) => { root.select-profile(id); }
+            create-profile(n) => { root.create-profile(n); }
+            rename-profile(id, n) => { root.rename-profile(id, n); }
+            import-profile => { root.import-profile(); }
+            export-profile => { root.export-profile(); }
+        }
+
+        if !show-advanced : VerticalLayout {
+            vertical-stretch: 1;
+            spacing: 14px;
+            alignment: center;
+
+            // Riga 1: FPS, RTS, CORSA
+            HorizontalLayout {
+                spacing: 14px;
+                alignment: center;
+                AocTileCard {
+                    width: 148px;
+                    title: "FPS";
+                    subtitle: is-it ? "SPARATORIA IN PRIMA PERSONA" : "FIRST PERSON SHOOTER";
+                    selected: mon.aoc-game-mode == 1;
+                    accent: accent;
+                    clicked => { set-game-mode(1); }
+                }
+                AocTileCard {
+                    width: 148px;
+                    title: "RTS";
+                    subtitle: is-it ? "STRATEGIA IN TEMPO REALE" : "REAL TIME STRATEGY";
+                    selected: mon.aoc-game-mode == 2;
+                    accent: accent;
+                    clicked => { set-game-mode(2); }
+                }
+                AocTileCard {
+                    width: 148px;
+                    title: is-it ? "CORSA" : "RACING";
+                    subtitle: is-it ? "CORSA" : "RACING";
+                    selected: mon.aoc-game-mode == 3;
+                    accent: accent;
+                    clicked => { set-game-mode(3); }
+                }
+                Rectangle { width: 148px; height: 102px; background: transparent; }
+            }
+
+            // Riga 2: G1, G2, G3, PERSONALIZZATO
+            HorizontalLayout {
+                spacing: 14px;
+                alignment: center;
+                AocTileCard {
+                    width: 148px;
+                    title: "G1";
+                    selected: mon.aoc-game-mode == 4;
+                    accent: accent;
+                    clicked => { set-game-mode(4); }
+                }
+                AocTileCard {
+                    width: 148px;
+                    title: "G2";
+                    selected: mon.aoc-game-mode == 5;
+                    accent: accent;
+                    clicked => { set-game-mode(5); }
+                }
+                AocTileCard {
+                    width: 148px;
+                    title: "G3";
+                    selected: mon.aoc-game-mode == 6;
+                    accent: accent;
+                    clicked => { set-game-mode(6); }
+                }
+                AocTileCard {
+                    width: 148px;
+                    title: is-it ? "PERSONALIZZATO" : "CUSTOM";
+                    selected: mon.aoc-game-mode == 7 || mon.aoc-game-mode == 0;
+                    accent: accent;
+                    clicked => { set-game-mode(7); }
+                }
+            }
+
+            // Pulsanti AVANZATE e IMPOSTAZIONE DEL GIOCO
+            VerticalLayout {
+                spacing: 8px;
+                padding-left: 24px;
+                padding-right: 24px;
+
+                AocPillButton {
+                    height: 36px;
+                    label: is-it ? "AVANZATE" : "ADVANCED";
+                    accent: accent;
+                    clicked => {
+                        adv-slot = (mon.aoc-game-mode >= 4 && mon.aoc-game-mode <= 7) ? mon.aoc-game-mode : 7;
+                        show-advanced = true;
+                    }
+                }
+                AocPillButton {
+                    height: 36px;
+                    label: is-it ? "IMPOSTAZIONE DEL GIOCO (SINC. GIOCO)" : "GAME SETTINGS (GAME SYNC)";
+                    accent: accent;
+                    clicked => { open-game-sync(); }
+                }
+            }
+        }
+
+        // Vista AVANZATE completa (Schermate 2 e 4)
+        if show-advanced : AocCard {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: 14px;
+                spacing: 12px;
+
+                HorizontalLayout {
+                    spacing: 14px;
+                    vertical-stretch: 1;
+
+                    // Sub-sidebar slot G1 / G2 / G3 / PERSONALIZZA
+                    VerticalLayout {
+                        width: 112px;
+                        spacing: 6px;
+                        for slot in [
+                            { id: 4, lbl: "G1" },
+                            { id: 5, lbl: "G2" },
+                            { id: 6, lbl: "G3" },
+                            { id: 7, lbl: is-it ? "PERSONALIZZA" : "CUSTOMIZE" },
+                        ] : AocPillButton {
+                            height: 46px;
+                            label: slot.lbl;
+                            active: adv-slot == slot.id;
+                            accent: accent;
+                            clicked => {
+                                adv-slot = slot.id;
+                                select-adv-slot(slot.id);
+                            }
+                        }
+                    }
+
+                    // Colonna Sinistra: Ctrl Ombre, Colore Gioco, Luminosità, Contrasto
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 10px;
+                        AocSliderRow {
+                            title: is-it ? "CTRL OMBRE" : "SHADOW CONTROL";
+                            value: mon.aoc-shadow-control;
+                            maximum: 100;
+                            badge-text: mon.aoc-shadow-hw ? "HW" : "SW";
+                            badge-color: mon.aoc-shadow-hw ? #39d353 : #f59e0b;
+                            accent: accent;
+                            changed(v) => { set-setting("shadow_control", v); }
+                        }
+                        AocSliderRow {
+                            title: is-it ? "COLORE GIOCO" : "GAME COLOR";
+                            value: mon.aoc-game-color;
+                            maximum: 20;
+                            badge-text: mon.aoc-game-color-hw ? "HW" : "SW";
+                            badge-color: mon.aoc-game-color-hw ? #39d353 : #f59e0b;
+                            accent: accent;
+                            changed(v) => { set-setting("game_color", v); }
+                        }
+                        AocSliderRow {
+                            title: is-it ? "LUMINOSITÀ" : "BRIGHTNESS";
+                            value: mon.brightness;
+                            maximum: mon.brightness-max;
+                            badge-text: "HW";
+                            badge-color: #39d353;
+                            accent: accent;
+                            enabled: mon.brightness-sup;
+                            changed(v) => { set-setting("brightness", v); }
+                        }
+                        AocSliderRow {
+                            title: is-it ? "CONTR." : "CONTRAST";
+                            value: mon.contrast;
+                            maximum: mon.contrast-max;
+                            badge-text: "HW";
+                            badge-color: #39d353;
+                            accent: accent;
+                            enabled: mon.contrast-sup;
+                            changed(v) => { set-setting("contrast", v); }
+                        }
+                    }
+
+                    // Colonna Destra: Colore + RGB, DCB Mod., Overdrive, Gamma
+                    ScrollView {
+                        horizontal-stretch: 1.3;
+                        VerticalLayout {
+                            spacing: 10px;
+                            padding-right: 6px;
+
+                            // COLORE (sRGB, Caldo, Normale, Freddo, RGB Utente)
+                            Text { text: is-it ? "COLORE" : "COLOR"; color: #ffffff; font-size: 11.5px; font-weight: 800; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                AocRadioOption { label: "SRGB"; selected: mon.color-temp == 1; accent: accent; clicked => { set-setting("color_temp", 1); } }
+                                AocRadioOption { label: is-it ? "CALDO(6500K)" : "WARM(6500K)"; selected: mon.color-temp == 5; accent: accent; clicked => { set-setting("color_temp", 5); } }
+                                AocRadioOption { label: is-it ? "NORMALE(7300K)" : "NORMAL(7300K)"; selected: mon.color-temp == 6; accent: accent; clicked => { set-setting("color_temp", 6); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                AocRadioOption { label: is-it ? "FREDDO(9300K)" : "COOL(9300K)"; selected: mon.color-temp == 8; accent: accent; clicked => { set-setting("color_temp", 8); } }
+                                AocRadioOption { label: is-it ? "RGB UTENTE" : "USER RGB"; selected: mon.color-temp == 11; accent: accent; clicked => { set-setting("color_temp", 11); } }
+                            }
+                            AocSliderRow { title: "R"; value: mon.red-gain; maximum: 100; badge-text: "HW"; accent: #ef4444; enabled: mon.rgb-sup; changed(v) => { set-setting("red", v); } }
+                            AocSliderRow { title: "G"; value: mon.green-gain; maximum: 100; badge-text: "HW"; accent: #22c55e; enabled: mon.rgb-sup; changed(v) => { set-setting("green", v); } }
+                            AocSliderRow { title: "B"; value: mon.blue-gain; maximum: 100; badge-text: "HW"; accent: #3b82f6; enabled: mon.rgb-sup; changed(v) => { set-setting("blue", v); } }
+
+                            // DCB MOD.
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Text { text: "DCB MOD."; color: #ffffff; font-size: 11.5px; font-weight: 800; vertical-alignment: center; }
+                                AocBadge { y: (parent.height - self.height) / 2; label: mon.aoc-dcb-hw ? "HW" : "SW"; badge-color: mon.aoc-dcb-hw ? #39d353 : #f59e0b; }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                AocRadioOption { label: "OFF"; selected: mon.aoc-dcb-mode == 0; accent: accent; clicked => { set-setting("dcb_mode", 0); } }
+                                AocRadioOption { label: is-it ? "MIGLIOR. COMP." : "FULL ENHANCE"; selected: mon.aoc-dcb-mode == 1; accent: accent; clicked => { set-setting("dcb_mode", 1); } }
+                                AocRadioOption { label: is-it ? "INTERF. NATURALE" : "NATURE SKIN"; selected: mon.aoc-dcb-mode == 2; accent: accent; clicked => { set-setting("dcb_mode", 2); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                AocRadioOption { label: is-it ? "VERDE PRATO" : "GREEN FIELD"; selected: mon.aoc-dcb-mode == 3; accent: accent; clicked => { set-setting("dcb_mode", 3); } }
+                                AocRadioOption { label: is-it ? "BLU CIELO" : "SKY BLUE"; selected: mon.aoc-dcb-mode == 4; accent: accent; clicked => { set-setting("dcb_mode", 4); } }
+                                AocRadioOption { label: is-it ? "RILEV. AUT." : "AUTO DETECT"; selected: mon.aoc-dcb-mode == 5; accent: accent; clicked => { set-setting("dcb_mode", 5); } }
+                            }
+                            AocRadioOption { label: is-it ? "DIMOSTRAZ." : "DEMO"; selected: mon.aoc-dcb-mode == 6; accent: accent; clicked => { set-setting("dcb_mode", 6); } }
+
+                            // OVERDRIVE
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Text { text: "OVERDRIVE"; color: #ffffff; font-size: 11.5px; font-weight: 800; vertical-alignment: center; }
+                                AocBadge { y: (parent.height - self.height) / 2; label: mon.aoc-overdrive-hw ? "HW" : "N/A"; badge-color: mon.aoc-overdrive-hw ? #39d353 : #64748b; }
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                AocRadioOption { label: "OFF"; selected: mon.aoc-overdrive == 0; accent: accent; clicked => { set-setting("overdrive", 0); } }
+                                AocRadioOption { label: is-it ? "DEBOLE" : "WEAK"; selected: mon.aoc-overdrive == 1; accent: accent; clicked => { set-setting("overdrive", 1); } }
+                                AocRadioOption { label: is-it ? "MEDIO" : "MEDIUM"; selected: mon.aoc-overdrive == 2; accent: accent; clicked => { set-setting("overdrive", 2); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                AocRadioOption { label: is-it ? "FORTE" : "STRONG"; selected: mon.aoc-overdrive == 3; accent: accent; clicked => { set-setting("overdrive", 3); } }
+                                AocRadioOption { label: "BOOST"; selected: mon.aoc-overdrive == 4; accent: accent; clicked => { set-setting("overdrive", 4); } }
+                            }
+
+                            // GAMMA
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Text { text: "GAMMA"; color: #ffffff; font-size: 11.5px; font-weight: 800; vertical-alignment: center; }
+                                AocBadge { y: (parent.height - self.height) / 2; label: mon.aoc-gamma-hw ? "HW" : "SW"; badge-color: mon.aoc-gamma-hw ? #39d353 : #f59e0b; }
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                AocRadioOption { label: "GAMMA1(2.2)"; selected: mon.aoc-gamma-mode == 0; accent: accent; clicked => { set-setting("gamma", 0); } }
+                                AocRadioOption { label: "GAMMA2(2.0)"; selected: mon.aoc-gamma-mode == 1; accent: accent; clicked => { set-setting("gamma", 1); } }
+                                AocRadioOption { label: "GAMMA3(2.4)"; selected: mon.aoc-gamma-mode == 2; accent: accent; clicked => { set-setting("gamma", 2); } }
+                            }
+                        }
+                    }
+                }
+
+                AocPillButton {
+                    height: 34px;
+                    label: is-it ? "INDIETRO" : "BACK";
+                    accent: accent;
+                    clicked => { show-advanced = false; }
+                }
+            }
+        }
+
+        AocActionFooter {
+            is-it: is-it;
+            accent: accent;
+            cancel-changes => { root.cancel-changes(); }
+            save-profile => { root.save-profile(); }
+            reset-all => { root.reset-all(); }
+        }
+    }
+}
+
+// ============================================================================
+// 2. SINC. GIOCO (SCHERMATA 7 - COLLEGATA AD APP TWEAKER)
+// ============================================================================
+export component AocGameSyncView inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <bool> is-it: true;
+    in property <[UiAocProfileItem]> profiles;
+    in property <string> active-profile-id;
+    in property <bool> game-sync-enabled: false;
+    in property <[UiAppRule]> rules;
+    in property <color> accent: #f05a46;
+
+    callback select-profile(string);
+    callback create-profile(string);
+    callback rename-profile(string, string);
+    callback import-profile;
+    callback export-profile;
+    callback toggle-game-sync(bool);
+    callback open-app-tweaker;
+    callback cancel-changes;
+    callback save-profile;
+    callback reset-all;
+
+    VerticalLayout {
+        spacing: 14px;
+
+        AocProfileHeader {
+            mon: mon;
+            is-it: is-it;
+            profiles: profiles;
+            active-profile-id: active-profile-id;
+            accent: accent;
+            select-profile(id) => { root.select-profile(id); }
+            create-profile(n) => { root.create-profile(n); }
+            rename-profile(id, n) => { root.rename-profile(id, n); }
+            import-profile => { root.import-profile(); }
+            export-profile => { root.export-profile(); }
+        }
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: 14px;
+
+            AocCard {
+                width: 220px;
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 14px;
+                    alignment: start;
+                    Text {
+                        text: is-it ? "SINC. GIOCO" : "GAME SYNC";
+                        color: #ffffff;
+                        font-size: 14px;
+                        font-weight: 800;
+                        horizontal-alignment: center;
+                    }
+                    AocPillButton {
+                        height: 36px;
+                        label: is-it ? "ATTIVO" : "ENABLE";
+                        active: game-sync-enabled;
+                        accent: accent;
+                        clicked => { toggle-game-sync(true); }
+                    }
+                    AocPillButton {
+                        height: 36px;
+                        label: is-it ? "DISABILITA" : "DISABLE";
+                        active: !game-sync-enabled;
+                        accent: accent;
+                        clicked => { toggle-game-sync(false); }
+                    }
+                }
+            }
+
+            AocCard {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 12px;
+                    HorizontalLayout {
+                        alignment: space-between;
+                        Text {
+                            text: is-it ? "Regole App / Giochi Attive (\{rules.length})" : "Active App / Game Rules (\{rules.length})";
+                            color: #ffffff;
+                            font-size: 13px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        AocPillButton {
+                            label: is-it ? "Gestisci in App Tweaker" : "Manage in App Tweaker";
+                            active: true;
+                            accent: accent;
+                            clicked => { open-app-tweaker(); }
+                        }
+                    }
+                    Text {
+                        text: is-it
+                            ? "Quando Sinc. Gioco è attivo, Monitor Manager rileva automaticamente il gioco o l'app in primo piano e applica il profilo configurato."
+                            : "When Game Sync is enabled, Monitor Manager detects the foreground game/app and switches monitor settings automatically.";
+                        color: #9ba3b6;
+                        font-size: 11.5px;
+                        wrap: word-wrap;
+                    }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: 6px;
+                            for r in rules : Rectangle {
+                                height: 34px;
+                                border-radius: 7px;
+                                background: #14161c;
+                                border-width: 1px;
+                                border-color: #272c38;
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    Text { text: r.exe-name; color: accent; font-size: 11.5px; font-weight: 700; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: r.enabled ? (is-it ? "Attiva" : "On") : "Off"; color: r.enabled ? #39d353 : #64748b; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        AocActionFooter {
+            is-it: is-it;
+            accent: accent;
+            cancel-changes => { root.cancel-changes(); }
+            save-profile => { root.save-profile(); }
+            reset-all => { root.reset-all(); }
+        }
+    }
+}
+
+// ============================================================================
+// 3. MODO DI BLU BASSO (SCHERMATA 8)
+// ============================================================================
+export component AocLowBlueView inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <bool> is-it: true;
+    in property <[UiAocProfileItem]> profiles;
+    in property <string> active-profile-id;
+    in property <color> accent: #f05a46;
+
+    callback select-profile(string);
+    callback create-profile(string);
+    callback rename-profile(string, string);
+    callback import-profile;
+    callback export-profile;
+    callback set-low-blue(int);
+    callback cancel-changes;
+    callback save-profile;
+    callback reset-all;
+
+    VerticalLayout {
+        spacing: 14px;
+
+        AocProfileHeader {
+            mon: mon;
+            is-it: is-it;
+            profiles: profiles;
+            active-profile-id: active-profile-id;
+            accent: accent;
+            select-profile(id) => { root.select-profile(id); }
+            create-profile(n) => { root.create-profile(n); }
+            rename-profile(id, n) => { root.rename-profile(id, n); }
+            import-profile => { root.import-profile(); }
+            export-profile => { root.export-profile(); }
+        }
+
+        VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            spacing: 14px;
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 8px;
+                Text {
+                    text: is-it ? "MODO DI BLU BASSO" : "LOW BLUE MODE";
+                    color: #ffffff;
+                    font-size: 13px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
+                AocBadge {
+                    y: (parent.height - self.height) / 2;
+                    label: mon.aoc-low-blue-hw ? "HW" : "SW";
+                    badge-color: mon.aoc-low-blue-hw ? #39d353 : #f59e0b;
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                AocTileCard {
+                    width: 164px;
+                    height: 112px;
+                    title: "OFF";
+                    selected: mon.aoc-low-blue == 0;
+                    accent: accent;
+                    clicked => { set-low-blue(0); }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 14px;
+                AocTileCard {
+                    width: 156px;
+                    height: 112px;
+                    title: "MULTIMEDIA";
+                    selected: mon.aoc-low-blue == 1;
+                    accent: accent;
+                    clicked => { set-low-blue(1); }
+                }
+                AocTileCard {
+                    width: 156px;
+                    height: 112px;
+                    title: "INTERNET";
+                    selected: mon.aoc-low-blue == 2;
+                    accent: accent;
+                    clicked => { set-low-blue(2); }
+                }
+                AocTileCard {
+                    width: 156px;
+                    height: 112px;
+                    title: is-it ? "UFFICIO" : "OFFICE";
+                    selected: mon.aoc-low-blue == 3;
+                    accent: accent;
+                    clicked => { set-low-blue(3); }
+                }
+                AocTileCard {
+                    width: 156px;
+                    height: 112px;
+                    title: is-it ? "LETTURA" : "READING";
+                    selected: mon.aoc-low-blue == 4;
+                    accent: accent;
+                    clicked => { set-low-blue(4); }
+                }
+            }
+        }
+
+        AocActionFooter {
+            is-it: is-it;
+            accent: accent;
+            cancel-changes => { root.cancel-changes(); }
+            save-profile => { root.save-profile(); }
+            reset-all => { root.reset-all(); }
+        }
+    }
+}
+
+// ============================================================================
+// 4. ECO. + PROFILO DI LUMINOSITÀ ESTESO (SCHERMATA 6)
+// ============================================================================
+export component AocEcoView inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <bool> is-it: true;
+    in property <[UiAocProfileItem]> profiles;
+    in property <string> active-profile-id;
+    in property <bool> ext-bright-enabled: false;
+    in property <int> ext-day-bright: 90;
+    in property <int> ext-evening-bright: 65;
+    in property <int> ext-night-bright: 40;
+    in property <color> accent: #f05a46;
+
+    callback select-profile(string);
+    callback create-profile(string);
+    callback rename-profile(string, string);
+    callback import-profile;
+    callback export-profile;
+    callback set-eco-mode(int);
+    callback set-ext-brightness(bool, int, int, int);
+    callback cancel-changes;
+    callback save-profile;
+    callback reset-all;
+
+    property <bool> show-ext-panel: false;
+
+    VerticalLayout {
+        spacing: 14px;
+
+        AocProfileHeader {
+            mon: mon;
+            is-it: is-it;
+            profiles: profiles;
+            active-profile-id: active-profile-id;
+            accent: accent;
+            select-profile(id) => { root.select-profile(id); }
+            create-profile(n) => { root.create-profile(n); }
+            rename-profile(id, n) => { root.rename-profile(id, n); }
+            import-profile => { root.import-profile(); }
+            export-profile => { root.export-profile(); }
+        }
+
+        VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            spacing: 14px;
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 8px;
+                Text { text: "ECO MODE"; color: #ffffff; font-size: 13px; font-weight: 800; vertical-alignment: center; }
+                AocBadge { y: (parent.height - self.height) / 2; label: mon.aoc-eco-hw ? "HW" : "SW"; badge-color: mon.aoc-eco-hw ? #39d353 : #f59e0b; }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 14px;
+                AocTileCard { width: 148px; title: "STANDARD"; selected: mon.aoc-eco-mode == 0; accent: accent; clicked => { set-eco-mode(0); } }
+                AocTileCard { width: 148px; title: is-it ? "TESTO" : "TEXT"; selected: mon.aoc-eco-mode == 1; accent: accent; clicked => { set-eco-mode(1); } }
+                AocTileCard { width: 148px; title: "INTERNET"; selected: mon.aoc-eco-mode == 2; accent: accent; clicked => { set-eco-mode(2); } }
+                AocTileCard { width: 148px; title: is-it ? "GIOCO" : "GAME"; selected: mon.aoc-eco-mode == 3; accent: accent; clicked => { set-eco-mode(3); } }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 14px;
+                AocTileCard { width: 148px; title: is-it ? "FILM" : "MOVIE"; selected: mon.aoc-eco-mode == 4; accent: accent; clicked => { set-eco-mode(4); } }
+                AocTileCard { width: 148px; title: "SPORT"; selected: mon.aoc-eco-mode == 5; accent: accent; clicked => { set-eco-mode(5); } }
+                AocTileCard { width: 148px; title: is-it ? "LETTURA" : "READING"; selected: mon.aoc-eco-mode == 6; accent: accent; clicked => { set-eco-mode(6); } }
+                AocTileCard { width: 148px; title: is-it ? "UNIFORMITÀ" : "UNIFORMITY"; selected: mon.aoc-eco-mode == 7; accent: accent; clicked => { set-eco-mode(7); } }
+            }
+
+            AocPillButton {
+                height: 36px;
+                label: is-it ? "PROFILO DI LUMINOSITÀ ESTESO" : "EXTENDED BRIGHTNESS PROFILE";
+                active: show-ext-panel || ext-bright-enabled;
+                accent: accent;
+                clicked => { show-ext-panel = !show-ext-panel; }
+            }
+
+            if show-ext-panel : AocCard {
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 10px;
+                    AocCheckOption {
+                        label: is-it ? "Attiva programmazione automatica luminosità per fascia oraria" : "Enable automatic time-of-day brightness schedule";
+                        checked: ext-bright-enabled;
+                        accent: accent;
+                        toggled(v) => { set-ext-brightness(v, ext-day-bright, ext-evening-bright, ext-night-bright); }
+                    }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        AocSliderRow {
+                            horizontal-stretch: 1;
+                            title: is-it ? "Giorno (07-19)" : "Day (07-19)";
+                            value: ext-day-bright;
+                            badge-text: "AUTO";
+                            badge-color: accent;
+                            accent: accent;
+                            changed(v) => { set-ext-brightness(ext-bright-enabled, v, ext-evening-bright, ext-night-bright); }
+                        }
+                        AocSliderRow {
+                            horizontal-stretch: 1;
+                            title: is-it ? "Sera (19-22)" : "Evening (19-22)";
+                            value: ext-evening-bright;
+                            badge-text: "AUTO";
+                            badge-color: accent;
+                            accent: accent;
+                            changed(v) => { set-ext-brightness(ext-bright-enabled, ext-day-bright, v, ext-night-bright); }
+                        }
+                        AocSliderRow {
+                            horizontal-stretch: 1;
+                            title: is-it ? "Notte (22-07)" : "Night (22-07)";
+                            value: ext-night-bright;
+                            badge-text: "AUTO";
+                            badge-color: accent;
+                            accent: accent;
+                            changed(v) => { set-ext-brightness(ext-bright-enabled, ext-day-bright, ext-evening-bright, v); }
+                        }
+                    }
+                }
+            }
+        }
+
+        AocActionFooter {
+            is-it: is-it;
+            accent: accent;
+            cancel-changes => { root.cancel-changes(); }
+            save-profile => { root.save-profile(); }
+            reset-all => { root.reset-all(); }
+        }
+    }
+}
+
+// ============================================================================
+// 5. DISPLAY COMPLETO (SCHERMATA 5)
+// ============================================================================
+export component AocDisplayView inherits Rectangle {
+    in property <UiMonitor> mon;
+    in property <bool> is-it: true;
+    in property <[UiAocProfileItem]> profiles;
+    in property <string> active-profile-id;
+    in property <bool> sync-osd-msg: false;
+    in property <color> accent: #f05a46;
+
+    callback select-profile(string);
+    callback create-profile(string);
+    callback rename-profile(string, string);
+    callback import-profile;
+    callback export-profile;
+    callback set-sync-msg(bool);
+    callback toggle-hdr(bool);
+    callback set-display-mode(int, int, int);
+    callback set-orientation(int);
+    callback set-image-ratio(int);
+    callback set-volume(int);
+    callback set-audio-mute(bool);
+    callback set-input-source(int);
+    callback dsub-auto-adjust;
+    callback open-hotkeys;
+    callback set-frame-counter(int);
+    callback set-dial-point(bool);
+    callback set-dcr(bool);
+    callback cancel-changes;
+    callback save-profile;
+    callback reset-all;
+
+    property <bool> show-res-list: false;
+
+    VerticalLayout {
+        spacing: 12px;
+
+        AocProfileHeader {
+            mon: mon;
+            is-it: is-it;
+            profiles: profiles;
+            active-profile-id: active-profile-id;
+            accent: accent;
+            select-profile(id) => { root.select-profile(id); }
+            create-profile(n) => { root.create-profile(n); }
+            rename-profile(id, n) => { root.rename-profile(id, n); }
+            import-profile => { root.import-profile(); }
+            export-profile => { root.export-profile(); }
+        }
+
+        // Griglia 3 colonne fedele alla schermata DISPLAY di AOC G-Menu
+        HorizontalLayout {
+            spacing: 12px;
+            vertical-stretch: 1;
+
+            // COLONNA 1: Messaggi/USB/HDR + Risoluzione/Orientamento/Rapporto Immagine
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 12px;
+
+                AocCard {
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+                        AocCheckOption {
+                            label: is-it ? "SINCRONIZZA MESSAGGIO" : "SYNC MESSAGE";
+                            checked: sync-osd-msg;
+                            accent: accent;
+                            toggled(v) => { set-sync-msg(v); }
+                        }
+                        AocCheckOption {
+                            label: is-it ? "USB CARICA (N/D)" : "USB CHARGE (N/A)";
+                            checked: false;
+                            enabled: mon.aoc-usb-charge-sup;
+                            accent: accent;
+                            toggled(v) => {}
+                        }
+                        AocPillButton {
+                            height: 34px;
+                            label: mon.hdr-supported
+                                ? (mon.hdr-enabled ? (is-it ? "HDR WINDOWS: ATTIVO" : "WINDOWS HDR: ON") : (is-it ? "IMPOSTAZIONE HDR (ATTIVA)" : "HDR SETTING (ENABLE)"))
+                                : (is-it ? "IMPOSTAZIONE HDR (NON SUPP.)" : "HDR SETTING (UNSUPPORTED)");
+                            active: mon.hdr-enabled;
+                            enabled: mon.hdr-supported;
+                            accent: accent;
+                            clicked => { toggle-hdr(!mon.hdr-enabled); }
+                        }
+                    }
+                }
+
+                AocCard {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+
+                        // Risoluzione & Hz
+                        HorizontalLayout {
+                            alignment: space-between;
+                            Text { text: is-it ? "RISOLUZIONE" : "RESOLUTION"; color: #ffffff; font-size: 11.5px; font-weight: 800; vertical-alignment: center; }
+                            AocBadge { label: "OS"; badge-color: #38bdf8; }
+                        }
+                        AocPillButton {
+                            height: 30px;
+                            label: mon.current-mode-label != "" ? mon.current-mode-label : mon.resolution;
+                            active: show-res-list;
+                            accent: accent;
+                            clicked => { show-res-list = !show-res-list; }
+                        }
+                        if show-res-list : ScrollView {
+                            height: 110px;
+                            VerticalLayout {
+                                spacing: 4px;
+                                for m in mon.available-modes : AocPillButton {
+                                    height: 24px;
+                                    label: m.label;
+                                    active: m.label == mon.current-mode-label;
+                                    accent: accent;
+                                    clicked => {
+                                        set-display-mode(m.width, m.height, m.hz);
+                                        show-res-list = false;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Orientamento
+                        Text { text: is-it ? "ORIENTAMENTO" : "ORIENTATION"; color: #ffffff; font-size: 11.5px; font-weight: 800; }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            for deg in [0, 90, 180, 270] : AocPillButton {
+                                horizontal-stretch: 1;
+                                height: 26px;
+                                min-width: 40px;
+                                label: "\{deg}°";
+                                active: mon.orientation-deg == deg;
+                                accent: accent;
+                                clicked => { set-orientation(deg); }
+                            }
+                        }
+
+                        // Rapporto Immagine (VCP 0x86)
+                        HorizontalLayout {
+                            alignment: space-between;
+                            Text { text: is-it ? "RAPP. IMMAG." : "IMAGE RATIO"; color: #ffffff; font-size: 11.5px; font-weight: 800; vertical-alignment: center; }
+                            AocBadge { label: "HW"; badge-color: mon.aoc-image-ratio-options.length > 0 ? #39d353 : #64748b; }
+                        }
+                        ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 4px;
+                                for opt in mon.aoc-image-ratio-options : AocPillButton {
+                                    height: 26px;
+                                    label: opt.label;
+                                    active: mon.aoc-image-ratio == opt.value;
+                                    accent: accent;
+                                    clicked => { set-image-ratio(opt.value); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // COLONNA 2: Volume + Disattiva Audio / Selezione Ingresso + D-Sub / Modifica Hotkey
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 12px;
+
+                AocCard {
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 8px;
+                        HorizontalLayout {
+                            alignment: space-between;
+                            AocSliderRow {
+                                horizontal-stretch: 1;
+                                title: "VOLUME";
+                                value: mon.volume;
+                                maximum: 100;
+                                badge-text: "HW";
+                                badge-color: mon.volume-sup ? #39d353 : #64748b;
+                                accent: accent;
+                                enabled: mon.volume-sup;
+                                changed(v) => { set-volume(v); }
+                            }
+                        }
+                        AocCheckOption {
+                            label: is-it ? "DISATTIVA AUDIO" : "MUTE AUDIO";
+                            checked: mon.aoc-audio-mute;
+                            enabled: mon.volume-sup;
+                            accent: accent;
+                            toggled(v) => { set-audio-mute(v); }
+                        }
+                    }
+                }
+
+                AocCard {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+                        HorizontalLayout {
+                            alignment: space-between;
+                            Text { text: is-it ? "SELEZIONE INGRESSO" : "INPUT SELECT"; color: #ffffff; font-size: 11.5px; font-weight: 800; vertical-alignment: center; }
+                            AocBadge { label: "HW"; badge-color: #39d353; }
+                        }
+                        VerticalLayout {
+                            spacing: 4px;
+                            vertical-stretch: 1;
+                            for inp in mon.aoc-input-options : AocRadioOption {
+                                label: inp.label;
+                                selected: mon.input-source == inp.value;
+                                accent: accent;
+                                clicked => { set-input-source(inp.value); }
+                            }
+                        }
+                        AocPillButton {
+                            height: 32px;
+                            label: is-it ? "REGOLAZIONE D-SUB" : "D-SUB ADJUST";
+                            enabled: mon.aoc-dsub-avail;
+                            accent: accent;
+                            clicked => { dsub-auto-adjust(); }
+                        }
+                    }
+                }
+
+                AocCard {
+                    VerticalLayout {
+                        padding: 12px;
+                        AocPillButton {
+                            height: 34px;
+                            label: is-it ? "MODIFICA TASTO DI SCELTA RAPIDA" : "EDIT HOTKEY";
+                            accent: accent;
+                            clicked => { open-hotkeys(); }
+                        }
+                    }
+                }
+            }
+
+            // COLONNA 3: Cont.Fotog. + Selettore + DCR / Info Monitor / MCCS & Light FX
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 12px;
+
+                AocCard {
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+
+                        HorizontalLayout {
+                            alignment: space-between;
+                            Text { text: is-it ? "CONT.FOTOG." : "FRAME COUNTER"; color: #ffffff; font-size: 11.5px; font-weight: 800; vertical-alignment: center; }
+                            AocBadge { label: mon.aoc-frame-counter-hw ? "HW" : "OS"; badge-color: mon.aoc-frame-counter-hw ? #39d353 : #38bdf8; }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 6px;
+                            for pos in [
+                                { id: 0, lbl: "OFF" },
+                                { id: 1, lbl: "↖" },
+                                { id: 2, lbl: "↗" },
+                                { id: 3, lbl: "↙" },
+                                { id: 4, lbl: "↘" },
+                            ] : AocPillButton {
+                                horizontal-stretch: 1;
+                                min-width: 34px;
+                                height: 28px;
+                                label: pos.lbl;
+                                active: mon.aoc-frame-counter-pos == pos.id;
+                                accent: accent;
+                                clicked => { set-frame-counter(pos.id); }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 14px;
+                            AocCheckOption {
+                                label: is-it ? "SELETTORE" : "DIAL POINT";
+                                checked: mon.aoc-dial-point;
+                                accent: accent;
+                                toggled(v) => { set-dial-point(v); }
+                            }
+                            AocCheckOption {
+                                label: "DCR";
+                                checked: mon.aoc-dcr;
+                                enabled: mon.aoc-dcr-hw;
+                                accent: accent;
+                                toggled(v) => { set-dcr(v); }
+                            }
+                        }
+                    }
+                }
+
+                AocCard {
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 6px;
+                        Text { text: (is-it ? "PRODUTTORE: " : "MANUFACTURER: ") + mon.brand; color: #e2e6f0; font-size: 11px; font-weight: 700; }
+                        Text { text: (is-it ? "DESCRIVI: " : "MODEL: ") + (mon.model-desc != "" ? mon.model-desc : mon.name); color: #e2e6f0; font-size: 11px; font-weight: 700; overflow: elide; }
+                        Text { text: (is-it ? "NUMERO DI SERIE: " : "SERIAL: ") + (mon.serial-number != "" ? mon.serial-number : "N/A"); color: #e2e6f0; font-size: 11px; font-weight: 700; }
+                    }
+                }
+
+                AocCard {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 6px;
+                        Text { text: "MCCS: " + (mon.mccs-version != "" ? mon.mccs-version : "2.2"); color: #c4cad8; font-size: 11px; font-weight: 700; }
+                        Text { text: "DDC/CI: " + (mon.ddc-supported ? "YES" : "NO"); color: mon.ddc-supported ? #39d353 : #f87171; font-size: 11px; font-weight: 700; }
+                        Text {
+                            text: mon.aoc-light-fx-sup
+                                ? "LIGHT FX: SUPPORTED"
+                                : (is-it ? "LIGHT FX: NON SUPPORTATO SU QUESTO MODELLO" : "LIGHT FX: NOT SUPPORTED");
+                            color: mon.aoc-light-fx-sup ? #c4cad8 : #6c7486;
+                            font-size: 10.5px;
+                            font-weight: 600;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+
+        AocActionFooter {
+            is-it: is-it;
+            accent: accent;
+            cancel-changes => { root.cancel-changes(); }
+            save-profile => { root.save-profile(); }
+            reset-all => { root.reset-all(); }
+        }
+    }
+}

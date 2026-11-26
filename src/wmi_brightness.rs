@@ -48,10 +48,21 @@ impl Drop for ComGuard {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct WmiMonitorIdentity {
+    pub instance_name: String,
+    pub manufacturer: String,
+    pub model: String,
+    pub serial: String,
+}
+
 /// Sessione WMI riutilizzabile sullo stesso thread worker per aggiornamenti instant (<1ms).
+/// IMPORTANTE: l'ordine dei campi determina l'ordine di Drop in Rust!
+/// `services` (IWbemServices) DEVE essere dichiarato PRIMA di `_com` (ComGuard),
+/// così `IWbemServices::Release()` viene chiamato prima di `CoUninitialize()`.
 pub struct WmiSession {
-    _com: ComGuard,
     services: IWbemServices,
+    _com: ComGuard,
 }
 
 impl WmiSession {
@@ -85,8 +96,8 @@ impl WmiSession {
             services
         };
         Some(Self {
-            _com: com,
             services,
+            _com: com,
         })
     }
 
@@ -236,47 +247,45 @@ pub fn query_wmi_panels() -> Vec<WmiBrightnessPanel> {
     };
 
     unsafe {
-        let Ok(enumerator) = session.services.ExecQuery(
+        if let Ok(enumerator) = session.services.ExecQuery(
             &BSTR::from("WQL"),
             &BSTR::from("SELECT InstanceName, CurrentBrightness FROM WmiMonitorBrightness"),
             WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
             None,
-        ) else {
-            return panels;
-        };
-
-        loop {
-            let mut objs: [Option<IWbemClassObject>; 1] = [None];
-            let mut returned = 0u32;
-            let hr = enumerator.Next(WBEM_INFINITE, &mut objs, &mut returned);
-            if hr.is_err() || returned == 0 {
-                break;
-            }
-            if let Some(obj) = objs[0].take() {
-                let mut v_inst = VARIANT::default();
-                let mut v_cur = VARIANT::default();
-                if obj.Get(w!("InstanceName"), 0, &mut v_inst, None, None).is_ok()
-                    && obj
-                        .Get(w!("CurrentBrightness"), 0, &mut v_cur, None, None)
-                        .is_ok()
-                {
-                    let current_opt: Result<u32, ()> = u32::try_from(&v_cur)
-                        .or_else(|_| i32::try_from(&v_cur).map(|v| v.max(0) as u32))
-                        .map_err(|_| ())
-                        .or_else(|_| {
-                            let raw = v_cur.as_raw();
-                            if raw.Anonymous.Anonymous.vt == 17 /* VT_UI1 */ {
-                                Ok(raw.Anonymous.Anonymous.Anonymous.bVal as u32)
-                            } else {
-                                Err(())
-                            }
-                        });
-                    if let (Ok(inst_bstr), Ok(cur)) = (BSTR::try_from(&v_inst), current_opt) {
-                        panels.push(WmiBrightnessPanel {
-                            instance_name: inst_bstr.to_string(),
-                            current: cur.min(100),
-                            max: 100,
-                        });
+        ) {
+            loop {
+                let mut objs: [Option<IWbemClassObject>; 1] = [None];
+                let mut returned = 0u32;
+                let hr = enumerator.Next(WBEM_INFINITE, &mut objs, &mut returned);
+                if hr.is_err() || returned == 0 {
+                    break;
+                }
+                if let Some(obj) = objs[0].take() {
+                    let mut v_inst = VARIANT::default();
+                    let mut v_cur = VARIANT::default();
+                    if obj.Get(w!("InstanceName"), 0, &mut v_inst, None, None).is_ok()
+                        && obj
+                            .Get(w!("CurrentBrightness"), 0, &mut v_cur, None, None)
+                            .is_ok()
+                    {
+                        let current_opt: Result<u32, ()> = u32::try_from(&v_cur)
+                            .or_else(|_| i32::try_from(&v_cur).map(|v| v.max(0) as u32))
+                            .map_err(|_| ())
+                            .or_else(|_| {
+                                let raw = v_cur.as_raw();
+                                if raw.Anonymous.Anonymous.vt == 17 /* VT_UI1 */ {
+                                    Ok(raw.Anonymous.Anonymous.Anonymous.bVal as u32)
+                                } else {
+                                    Err(())
+                                }
+                            });
+                        if let (Ok(inst_bstr), Ok(cur)) = (BSTR::try_from(&v_inst), current_opt) {
+                            panels.push(WmiBrightnessPanel {
+                                instance_name: inst_bstr.to_string(),
+                                current: cur.min(100),
+                                max: 100,
+                            });
+                        }
                     }
                 }
             }
@@ -284,6 +293,131 @@ pub fn query_wmi_panels() -> Vec<WmiBrightnessPanel> {
     }
 
     panels
+}
+
+unsafe fn decode_wmi_u16_array(v: &VARIANT) -> String {
+    use windows::Win32::System::Ole::{
+        SafeArrayAccessData, SafeArrayGetLBound, SafeArrayGetUBound, SafeArrayUnaccessData,
+    };
+
+    let raw = v.as_raw();
+    let vt = raw.Anonymous.Anonymous.vt;
+    const VT_ARRAY_FLAG: u16 = 0x2000;
+    if (vt & VT_ARRAY_FLAG) == 0 {
+        return String::new();
+    }
+    let elem_vt = vt & !VT_ARRAY_FLAG;
+    let psa = raw.Anonymous.Anonymous.Anonymous.parray
+        as *const windows::Win32::System::Com::SAFEARRAY;
+    if psa.is_null() {
+        return String::new();
+    }
+
+    let Ok(lb) = SafeArrayGetLBound(psa, 1) else {
+        return String::new();
+    };
+    let Ok(ub) = SafeArrayGetUBound(psa, 1) else {
+        return String::new();
+    };
+    if ub < lb {
+        return String::new();
+    }
+    let count = (ub - lb + 1) as usize;
+    if count == 0 || count > 256 {
+        return String::new();
+    }
+
+    let mut data_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+    if SafeArrayAccessData(psa, &mut data_ptr).is_err() || data_ptr.is_null() {
+        return String::new();
+    }
+
+    let mut u16_chars = Vec::with_capacity(count);
+    match elem_vt {
+        // VT_I4 (3) or VT_UI4 (19): WMI often marshals uint16[] as 32-bit ints
+        3 | 19 => {
+            let slice = std::slice::from_raw_parts(data_ptr as *const u32, count);
+            for &val in slice {
+                if val == 0 {
+                    break;
+                }
+                u16_chars.push(val as u16);
+            }
+        }
+        // VT_I2 (2) or VT_UI2 (18)
+        2 | 18 => {
+            let slice = std::slice::from_raw_parts(data_ptr as *const u16, count);
+            for &val in slice {
+                if val == 0 {
+                    break;
+                }
+                u16_chars.push(val);
+            }
+        }
+        // VT_UI1 (17) | VT_I1 (16)
+        16 | 17 => {
+            let slice = std::slice::from_raw_parts(data_ptr as *const u8, count);
+            for &val in slice {
+                if val == 0 {
+                    break;
+                }
+                u16_chars.push(val as u16);
+            }
+        }
+        _ => {}
+    }
+
+    let _ = SafeArrayUnaccessData(psa);
+    String::from_utf16_lossy(&u16_chars).trim().to_string()
+}
+
+/// Interroga produttore, modello e numero di serie EDID dei monitor tramite `WmiMonitorID` (`root\WMI`).
+pub fn query_wmi_identities() -> Vec<WmiMonitorIdentity> {
+    let mut list = Vec::new();
+    let Some(session) = WmiSession::connect() else {
+        return list;
+    };
+
+    unsafe {
+        if let Ok(enumerator) = session.services.ExecQuery(
+            &BSTR::from("WQL"),
+            &BSTR::from("SELECT InstanceName, ManufacturerName, UserFriendlyName, SerialNumberID FROM WmiMonitorID"),
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+            None,
+        ) {
+            loop {
+                let mut objs: [Option<IWbemClassObject>; 1] = [None];
+                let mut returned = 0u32;
+                let hr = enumerator.Next(WBEM_INFINITE, &mut objs, &mut returned);
+                if hr.is_err() || returned == 0 {
+                    break;
+                }
+                if let Some(obj) = objs[0].take() {
+                    let mut v_inst = VARIANT::default();
+                    let mut v_mfr = VARIANT::default();
+                    let mut v_name = VARIANT::default();
+                    let mut v_ser = VARIANT::default();
+
+                    if obj.Get(w!("InstanceName"), 0, &mut v_inst, None, None).is_ok() {
+                        if let Ok(inst_bstr) = BSTR::try_from(&v_inst) {
+                            let _ = obj.Get(w!("ManufacturerName"), 0, &mut v_mfr, None, None);
+                            let _ = obj.Get(w!("UserFriendlyName"), 0, &mut v_name, None, None);
+                            let _ = obj.Get(w!("SerialNumberID"), 0, &mut v_ser, None, None);
+
+                            list.push(WmiMonitorIdentity {
+                                instance_name: inst_bstr.to_string(),
+                                manufacturer: decode_wmi_u16_array(&v_mfr),
+                                model: decode_wmi_u16_array(&v_name),
+                                serial: decode_wmi_u16_array(&v_ser),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    list
 }
 
 #[cfg(test)]
@@ -302,11 +436,14 @@ mod tests {
     }
 
     #[test]
-    fn wmi_query_does_not_panic() {
-        let panels = query_wmi_panels();
-        for p in &panels {
-            assert!(!p.instance_name.is_empty());
-            assert!(p.current <= 100);
+    fn wmi_query_and_session_drop_do_not_crash() {
+        for _ in 0..3 {
+            let panels = query_wmi_panels();
+            for p in &panels {
+                assert!(!p.instance_name.is_empty());
+                assert!(p.current <= 100);
+            }
+            let _ids = query_wmi_identities();
         }
     }
 }

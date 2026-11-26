@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-pub const APP_VERSION: &str = "1.16";
+pub const APP_VERSION: &str = "1.17";
 pub const GITHUB_REPO: &str = "riccardo-bettini/Monitor-Manager";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,7 +221,7 @@ where
     let is_setup = download_url.to_lowercase().contains("setup");
 
     let resp = ureq::get(download_url)
-        .set("User-Agent", "Monitor-Manager-Updater/1.16")
+        .set("User-Agent", "Monitor-Manager-Updater/1.17")
         .call()
         .map_err(|e| format!("Errore download aggiornamento: {}", e))?;
 

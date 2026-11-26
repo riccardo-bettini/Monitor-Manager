@@ -6,6 +6,8 @@ import {
     UiWindowEntry,
     UiHotkeyItem,
     UiAppRule,
+    UiDisplayMode,
+    UiAocProfileItem,
 } from "types.slint";
 import {
     GameVisualView,
@@ -15,6 +17,13 @@ import {
     AppTweakerView,
     AiAssistantView,
 } from "dwc_views.slint";
+import {
+    AocGameModeView,
+    AocGameSyncView,
+    AocLowBlueView,
+    AocEcoView,
+    AocDisplayView,
+} from "aoc_views.slint";
 
 export {
     UiVcpOption,
@@ -23,6 +32,8 @@ export {
     UiWindowEntry,
     UiHotkeyItem,
     UiAppRule,
+    UiDisplayMode,
+    UiAocProfileItem,
 }
 
 // ============================================================================
@@ -1224,6 +1235,42 @@ export component AppWindow inherits Window {
             alignment-grid: false,
             caps-raw: "",
             mpu-ver: "",
+            is-aoc: false,
+            serial-number: "",
+            model-desc: "",
+            orientation-deg: 0,
+            current-mode-label: "2560x1440-165HZ",
+            available-modes: [],
+            aoc-game-mode: 7,
+            aoc-game-mode-hw: false,
+            aoc-shadow-control: 50,
+            aoc-shadow-hw: false,
+            aoc-game-color: 10,
+            aoc-game-color-hw: false,
+            aoc-dcb-mode: 0,
+            aoc-dcb-hw: false,
+            aoc-overdrive: 2,
+            aoc-overdrive-hw: false,
+            aoc-gamma-mode: 0,
+            aoc-gamma-hw: false,
+            aoc-low-blue: 0,
+            aoc-low-blue-hw: false,
+            aoc-eco-mode: 0,
+            aoc-eco-hw: false,
+            aoc-dcr: false,
+            aoc-dcr-hw: false,
+            aoc-frame-counter-pos: 0,
+            aoc-frame-counter-hw: false,
+            aoc-dial-point: false,
+            aoc-dial-point-hw: false,
+            aoc-audio-mute: false,
+            aoc-image-ratio: 2,
+            aoc-image-ratio-options: [],
+            aoc-input-options: [],
+            aoc-color-options: [],
+            aoc-dsub-avail: false,
+            aoc-usb-charge-sup: false,
+            aoc-light-fx-sup: false,
         }
     ];
     in-out property <int> selected-monitor-index: 0;
@@ -1281,10 +1328,10 @@ export component AppWindow inherits Window {
     in-out property <bool> window-maximized: false;
 
     // Stato Auto-Updater GitHub
-    in-out property <string> app-version: "1.16";
-    in-out property <string> update-status-text: "Monitor Manager v1.16 (ASUS DWC Suite, MCCS Engine & DisplayConfig)";
+    in-out property <string> app-version: "1.17";
+    in-out property <string> update-status-text: "Monitor Manager v1.17 (AOC G-Menu Suite, ASUS DWC & DisplayConfig)";
     in-out property <bool> update-available: false;
-    in-out property <string> latest-version: "1.16";
+    in-out property <string> latest-version: "1.17";
     in-out property <bool> update-checking: false;
     in-out property <bool> update-downloading: false;
     in-out property <bool> update-installing: false;
@@ -1319,6 +1366,15 @@ export component AppWindow inherits Window {
     in-out property <int> ai-night-start: 21;
     in-out property <int> ai-night-end: 7;
     in-out property <string> last-ai-feedback: "";
+
+    // Stato AOC G-Menu Suite
+    in-out property <[UiAocProfileItem]> aoc-profiles: [{ id: "profile1", name: "PROFILE1" }];
+    in-out property <string> aoc-active-profile-id: "profile1";
+    in-out property <bool> aoc-ext-bright-enabled: false;
+    in-out property <int> aoc-ext-day-bright: 90;
+    in-out property <int> aoc-ext-evening-bright: 65;
+    in-out property <int> aoc-ext-night-bright: 40;
+    in-out property <bool> aoc-sync-osd-msg: false;
 
     // Stato modale di conferma per VCP critici (Reset Fabbrica / Spegnimento DPMS)
     in-out property <bool> confirm-vcp-open: false;
@@ -1383,6 +1439,31 @@ export component AppWindow inherits Window {
     callback set-power-saving-mode(bool);
     callback set-update-policy(string);
 
+    // Callbacks AOC G-Menu Suite & Display Windows
+    callback aoc-select-profile(string);
+    callback aoc-create-profile(string);
+    callback aoc-rename-profile(string, string);
+    callback aoc-import-profile(int);
+    callback aoc-export-profile(int);
+    callback aoc-cancel-changes(int);
+    callback aoc-save-profile(int);
+    callback aoc-reset-all(int);
+    callback aoc-set-game-mode(int, int);
+    callback aoc-select-adv-slot(int, int);
+    callback aoc-set-setting(int, string, int);
+    callback aoc-set-low-blue(int, int);
+    callback aoc-set-eco-mode(int, int);
+    callback aoc-set-ext-brightness(int, bool, int, int, int);
+    callback aoc-set-dcr(int, bool);
+    callback aoc-set-frame-counter(int, int);
+    callback aoc-set-dial-point(int, bool);
+    callback aoc-set-audio-mute(int, bool);
+    callback aoc-set-image-ratio(int, int);
+    callback aoc-dsub-auto(int);
+    callback aoc-set-sync-msg(bool);
+    callback set-display-mode(int, int, int, int);
+    callback set-orientation(int, int);
+
     // --- Palette Colori Reattive ---
     property <bool> is-en: root.lang == "en";
     property <bool> is-compact: root.layout-density == "compact";
@@ -1432,6 +1513,22 @@ export component AppWindow inherits Window {
             color-space: 0, color-space-sup: false,
             crosshair-style: 0, timer-preset: 0, fps-counter: false, alignment-grid: false,
             caps-raw: "", mpu-ver: "",
+            is-aoc: false, serial-number: "", model-desc: "", orientation-deg: 0,
+            current-mode-label: "", available-modes: [],
+            aoc-game-mode: 7, aoc-game-mode-hw: false,
+            aoc-shadow-control: 50, aoc-shadow-hw: false,
+            aoc-game-color: 10, aoc-game-color-hw: false,
+            aoc-dcb-mode: 0, aoc-dcb-hw: false,
+            aoc-overdrive: 2, aoc-overdrive-hw: false,
+            aoc-gamma-mode: 0, aoc-gamma-hw: false,
+            aoc-low-blue: 0, aoc-low-blue-hw: false,
+            aoc-eco-mode: 0, aoc-eco-hw: false,
+            aoc-dcr: false, aoc-dcr-hw: false,
+            aoc-frame-counter-pos: 0, aoc-frame-counter-hw: false,
+            aoc-dial-point: false, aoc-dial-point-hw: false,
+            aoc-audio-mute: false, aoc-image-ratio: 2,
+            aoc-image-ratio-options: [], aoc-input-options: [], aoc-color-options: [],
+            aoc-dsub-avail: false, aoc-usb-charge-sup: false, aoc-light-fx-sup: false,
         };
 
     property <string> active-input-label:
@@ -1659,7 +1756,12 @@ export component AppWindow inherits Window {
                                                 && root.active-view != "multiscreen"
                                                 && root.active-view != "hotkeys"
                                                 && root.active-view != "apptweaker"
-                                                && root.active-view != "ai") {
+                                                && root.active-view != "ai"
+                                                && root.active-view != "aoc_gamemode"
+                                                && root.active-view != "aoc_gamesync"
+                                                && root.active-view != "aoc_lowblue"
+                                                && root.active-view != "aoc_eco"
+                                                && root.active-view != "aoc_display") {
                                                 root.active-view = "dashboard";
                                             }
                                         }
@@ -1828,14 +1930,16 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            // Intestazione ASUS DisplayWidget Suite
+                            // Intestazione Suite Adattiva per Brand (AOC G-Menu / ASUS DisplayWidget / Display Suite)
                             Rectangle {
                                 height: 18px;
                                 background: transparent;
                                 HorizontalLayout {
                                     padding-left: 8px;
                                     Text {
-                                        text: "DISPLAYWIDGET SUITE";
+                                        text: root.current-monitor.is-aoc
+                                            ? "AOC G-MENU SUITE"
+                                            : (root.current-monitor.is-asus ? "DISPLAYWIDGET SUITE" : "DISPLAY SUITE");
                                         color: #6f788a;
                                         font-size: 10px;
                                         font-weight: 700;
@@ -1845,14 +1949,82 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            for nav in [
-                                { id: "gamevisual", it: "GameVisual", en: "GameVisual", tag: "GV" },
-                                { id: "gameplus", it: "GamePlus", en: "GamePlus", tag: "GP" },
-                                { id: "multiscreen", it: "MultiScreen", en: "MultiScreen", tag: "MS" },
-                                { id: "hotkeys", it: "Tasto di scelta rapida", en: "Hotkeys", tag: "HK" },
-                                { id: "apptweaker", it: "App Tweaker", en: "App Tweaker", tag: "AT" },
-                                { id: "ai", it: "Assistente IA", en: "AI Assistant", tag: "AI" },
-                            ] : Rectangle {
+                            if root.current-monitor.is-aoc : VerticalLayout {
+                                spacing: 4px;
+                                for nav in [
+                                    { id: "aoc_gamemode", it: "Modalità Gioco", en: "Game Mode", tag: "MG" },
+                                    { id: "aoc_gamesync", it: "Sinc. Gioco", en: "Game Sync", tag: "SG" },
+                                    { id: "aoc_lowblue", it: "Modo di Blu Basso", en: "Low Blue Mode", tag: "BL" },
+                                    { id: "aoc_eco", it: "Eco.", en: "Eco.", tag: "EC" },
+                                    { id: "aoc_display", it: "Display", en: "Display", tag: "DP" },
+                                    { id: "multiscreen", it: "Screen+", en: "Screen+", tag: "S+" },
+                                    { id: "hotkeys", it: "Tasti Rapidi", en: "Hotkeys", tag: "HK" },
+                                    { id: "ai", it: "Assistente IA", en: "AI Assistant", tag: "AI" },
+                                ] : Rectangle {
+                                    height: 34px;
+                                    border-radius: 8px;
+                                    background: root.active-view == nav.id ? #2f3441 : (aoc-nav-ta.has-hover ? #242833 : transparent);
+                                    border-width: root.active-view == nav.id ? 1px : (aoc-nav-ta.has-hover ? 1px : 0px);
+                                    border-color: root.active-view == nav.id ? root.accent-main : (aoc-nav-ta.has-hover ? root.accent-main.with-alpha(0.3) : transparent);
+                                    animate background, border-color {
+                                        duration: SpringTheme.animations-enabled ? 180ms : 0ms;
+                                        easing: cubic-bezier(0.34, 1.4, 0.64, 1);
+                                    }
+                                    aoc-nav-ta := TouchArea {
+                                        width: 100%; height: 100%;
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.active-view = nav.id;
+                                            if (nav.id == "multiscreen" || nav.id == "apptweaker") {
+                                                root.refresh-open-windows();
+                                            }
+                                        }
+                                    }
+                                    if root.active-view == nav.id : Rectangle {
+                                        x: 0px; y: 8px; width: 3px; height: 18px; border-radius: 1.5px; background: root.accent-main;
+                                    }
+                                    HorizontalLayout {
+                                        padding-left: 12px; padding-right: 10px; spacing: 10px; alignment: start;
+                                        Rectangle {
+                                            width: 22px; height: 18px; y: (parent.height - self.height) / 2; border-radius: 5px;
+                                            background: root.active-view == nav.id ? root.accent-main.with-alpha(0.22) : #262b36;
+                                            border-width: 1px;
+                                            border-color: root.active-view == nav.id ? root.accent-main.with-alpha(0.6) : #353b4a;
+                                            Text { text: nav.tag; color: root.active-view == nav.id ? root.accent-main : #9da5b4; font-size: 9.5px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+                                        }
+                                        Text {
+                                            text: root.is-en ? nav.en : nav.it;
+                                            color: root.active-view == nav.id ? #ffffff : #c3c9d5;
+                                            font-size: 12.5px; font-weight: root.active-view == nav.id ? 600 : 500;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                                if !root.current-monitor.aoc-light-fx-sup : Rectangle {
+                                    height: 30px;
+                                    opacity: 0.38;
+                                    HorizontalLayout {
+                                        padding-left: 12px; padding-right: 10px; spacing: 10px; alignment: start;
+                                        Rectangle {
+                                            width: 22px; height: 18px; y: (parent.height - self.height) / 2; border-radius: 5px;
+                                            background: #1d2029; border-width: 1px; border-color: #2c313f;
+                                            Text { text: "FX"; color: #6f788a; font-size: 9.5px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+                                        }
+                                        Text { text: "Light FX (N/D)"; color: #798194; font-size: 12px; vertical-alignment: center; }
+                                    }
+                                }
+                            }
+
+                            if !root.current-monitor.is-aoc : VerticalLayout {
+                                spacing: 4px;
+                                for nav in [
+                                    { id: "gamevisual", it: root.current-monitor.is-asus ? "GameVisual" : "Display & Preset", en: root.current-monitor.is-asus ? "GameVisual" : "Display & Presets", tag: "GV" },
+                                    { id: "gameplus", it: "GamePlus", en: "GamePlus", tag: "GP" },
+                                    { id: "multiscreen", it: "MultiScreen", en: "MultiScreen", tag: "MS" },
+                                    { id: "hotkeys", it: "Tasto di scelta rapida", en: "Hotkeys", tag: "HK" },
+                                    { id: "apptweaker", it: "App Tweaker", en: "App Tweaker", tag: "AT" },
+                                    { id: "ai", it: "Assistente IA", en: "AI Assistant", tag: "AI" },
+                                ] : Rectangle {
                                 height: 35px;
                                 border-radius: 8px;
                                 background: root.active-view == nav.id ? #2f3441 : (nav-ta.has-hover ? #242833 : transparent);
@@ -1909,12 +2081,13 @@ export component AppWindow inherits Window {
                                         }
                                     }
 
-                                    Text {
-                                        text: root.is-en ? nav.en : nav.it;
-                                        color: root.active-view == nav.id ? #ffffff : #c3c9d5;
-                                        font-size: 12.5px;
-                                        font-weight: root.active-view == nav.id ? 600 : 500;
-                                        vertical-alignment: center;
+                                        Text {
+                                            text: root.is-en ? nav.en : nav.it;
+                                            color: root.active-view == nav.id ? #ffffff : #c3c9d5;
+                                            font-size: 12.5px;
+                                            font-weight: root.active-view == nav.id ? 600 : 500;
+                                            vertical-alignment: center;
+                                        }
                                     }
                                 }
                             }
@@ -3706,6 +3879,126 @@ export component AppWindow inherits Window {
                             }
 
                             // ========================================================
+                            // VISTE AOC G-MENU SUITE
+                            // ========================================================
+                            if root.active-view == "aoc_gamemode" : AocGameModeView {
+                                height: Math.max(620px, sv.visible-height - 38px);
+                                mon: root.current-monitor;
+                                is-it: !root.is-en;
+                                profiles: root.aoc-profiles;
+                                active-profile-id: root.aoc-active-profile-id;
+                                accent: root.accent-main;
+                                select-profile(id) => { root.aoc-select-profile(id); }
+                                create-profile(n) => { root.aoc-create-profile(n); }
+                                rename-profile(id, n) => { root.aoc-rename-profile(id, n); }
+                                import-profile => { root.aoc-import-profile(root.current-monitor.id); }
+                                export-profile => { root.aoc-export-profile(root.current-monitor.id); }
+                                set-game-mode(m) => { root.aoc-set-game-mode(root.current-monitor.id, m); }
+                                select-adv-slot(s) => { root.aoc-select-adv-slot(root.current-monitor.id, s); }
+                                set-setting(k, v) => { root.aoc-set-setting(root.current-monitor.id, k, v); }
+                                open-game-sync => { root.active-view = "aoc_gamesync"; }
+                                cancel-changes => { root.aoc-cancel-changes(root.current-monitor.id); }
+                                save-profile => { root.aoc-save-profile(root.current-monitor.id); }
+                                reset-all => { root.aoc-reset-all(root.current-monitor.id); }
+                            }
+
+                            if root.active-view == "aoc_gamesync" : AocGameSyncView {
+                                height: Math.max(580px, sv.visible-height - 38px);
+                                mon: root.current-monitor;
+                                is-it: !root.is-en;
+                                profiles: root.aoc-profiles;
+                                active-profile-id: root.aoc-active-profile-id;
+                                game-sync-enabled: root.app-tweaker-enabled;
+                                rules: root.app-rules;
+                                accent: root.accent-main;
+                                select-profile(id) => { root.aoc-select-profile(id); }
+                                create-profile(n) => { root.aoc-create-profile(n); }
+                                rename-profile(id, n) => { root.aoc-rename-profile(id, n); }
+                                import-profile => { root.aoc-import-profile(root.current-monitor.id); }
+                                export-profile => { root.aoc-export-profile(root.current-monitor.id); }
+                                toggle-game-sync(en) => { root.toggle-app-tweaker(en); }
+                                open-app-tweaker => {
+                                    root.refresh-open-windows();
+                                    root.active-view = "apptweaker";
+                                }
+                                cancel-changes => { root.aoc-cancel-changes(root.current-monitor.id); }
+                                save-profile => { root.aoc-save-profile(root.current-monitor.id); }
+                                reset-all => { root.aoc-reset-all(root.current-monitor.id); }
+                            }
+
+                            if root.active-view == "aoc_lowblue" : AocLowBlueView {
+                                height: Math.max(560px, sv.visible-height - 38px);
+                                mon: root.current-monitor;
+                                is-it: !root.is-en;
+                                profiles: root.aoc-profiles;
+                                active-profile-id: root.aoc-active-profile-id;
+                                accent: root.accent-main;
+                                select-profile(id) => { root.aoc-select-profile(id); }
+                                create-profile(n) => { root.aoc-create-profile(n); }
+                                rename-profile(id, n) => { root.aoc-rename-profile(id, n); }
+                                import-profile => { root.aoc-import-profile(root.current-monitor.id); }
+                                export-profile => { root.aoc-export-profile(root.current-monitor.id); }
+                                set-low-blue(m) => { root.aoc-set-low-blue(root.current-monitor.id, m); }
+                                cancel-changes => { root.aoc-cancel-changes(root.current-monitor.id); }
+                                save-profile => { root.aoc-save-profile(root.current-monitor.id); }
+                                reset-all => { root.aoc-reset-all(root.current-monitor.id); }
+                            }
+
+                            if root.active-view == "aoc_eco" : AocEcoView {
+                                height: Math.max(580px, sv.visible-height - 38px);
+                                mon: root.current-monitor;
+                                is-it: !root.is-en;
+                                profiles: root.aoc-profiles;
+                                active-profile-id: root.aoc-active-profile-id;
+                                ext-bright-enabled: root.aoc-ext-bright-enabled;
+                                ext-day-bright: root.aoc-ext-day-bright;
+                                ext-evening-bright: root.aoc-ext-evening-bright;
+                                ext-night-bright: root.aoc-ext-night-bright;
+                                accent: root.accent-main;
+                                select-profile(id) => { root.aoc-select-profile(id); }
+                                create-profile(n) => { root.aoc-create-profile(n); }
+                                rename-profile(id, n) => { root.aoc-rename-profile(id, n); }
+                                import-profile => { root.aoc-import-profile(root.current-monitor.id); }
+                                export-profile => { root.aoc-export-profile(root.current-monitor.id); }
+                                set-eco-mode(m) => { root.aoc-set-eco-mode(root.current-monitor.id, m); }
+                                set-ext-brightness(en, d, e, n) => { root.aoc-set-ext-brightness(root.current-monitor.id, en, d, e, n); }
+                                cancel-changes => { root.aoc-cancel-changes(root.current-monitor.id); }
+                                save-profile => { root.aoc-save-profile(root.current-monitor.id); }
+                                reset-all => { root.aoc-reset-all(root.current-monitor.id); }
+                            }
+
+                            if root.active-view == "aoc_display" : AocDisplayView {
+                                height: Math.max(660px, sv.visible-height - 38px);
+                                mon: root.current-monitor;
+                                is-it: !root.is-en;
+                                profiles: root.aoc-profiles;
+                                active-profile-id: root.aoc-active-profile-id;
+                                sync-osd-msg: root.aoc-sync-osd-msg;
+                                accent: root.accent-main;
+                                select-profile(id) => { root.aoc-select-profile(id); }
+                                create-profile(n) => { root.aoc-create-profile(n); }
+                                rename-profile(id, n) => { root.aoc-rename-profile(id, n); }
+                                import-profile => { root.aoc-import-profile(root.current-monitor.id); }
+                                export-profile => { root.aoc-export-profile(root.current-monitor.id); }
+                                set-sync-msg(v) => { root.aoc-set-sync-msg(v); }
+                                toggle-hdr(en) => { root.set-hdr-enabled(root.current-monitor.id, en); }
+                                set-display-mode(w, h, hz) => { root.set-display-mode(root.current-monitor.id, w, h, hz); }
+                                set-orientation(deg) => { root.set-orientation(root.current-monitor.id, deg); }
+                                set-image-ratio(v) => { root.aoc-set-image-ratio(root.current-monitor.id, v); }
+                                set-volume(v) => { root.set-vcp(root.current-monitor.id, 98, v); }
+                                set-audio-mute(v) => { root.aoc-set-audio-mute(root.current-monitor.id, v); }
+                                set-input-source(v) => { root.set-vcp(root.current-monitor.id, 96, v); }
+                                dsub-auto-adjust => { root.aoc-dsub-auto(root.current-monitor.id); }
+                                open-hotkeys => { root.active-view = "hotkeys"; }
+                                set-frame-counter(pos) => { root.aoc-set-frame-counter(root.current-monitor.id, pos); }
+                                set-dial-point(en) => { root.aoc-set-dial-point(root.current-monitor.id, en); }
+                                set-dcr(en) => { root.aoc-set-dcr(root.current-monitor.id, en); }
+                                cancel-changes => { root.aoc-cancel-changes(root.current-monitor.id); }
+                                save-profile => { root.aoc-save-profile(root.current-monitor.id); }
+                                reset-all => { root.aoc-reset-all(root.current-monitor.id); }
+                            }
+
+                            // ========================================================
                             // VISTE DISPLAYWIDGET CENTER SUITE (ASUS TUF GAMING PARITY)
                             // ========================================================
                             if root.active-view == "gamevisual" : GameVisualView {
@@ -4792,10 +5085,10 @@ export component AppWindow inherits Window {
 }
 
 // ============================================================================
-// FINESTRA INSTALLER SETUP v1.16 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
+// FINESTRA INSTALLER SETUP v1.17 (DARK MATTE TITANIUM & SPRING ANIMATIONS)
 // ============================================================================
 export component SetupWindow inherits Window {
-    title: "Installazione Monitor Manager v1.16";
+    title: "Installazione Monitor Manager v1.17";
     preferred-width: 520px;
     preferred-height: 430px;
     background: transparent;
@@ -4807,7 +5100,7 @@ export component SetupWindow inherits Window {
     in-out property <bool> installing: false;
     in-out property <bool> installed: false;
     in-out property <float> install-progress: 0.0;
-    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.16 (ASUS DWC Suite, MCCS Engine & DisplayConfig)";
+    in-out property <string> status-text: "Pronto per installare Monitor Manager v1.17 (AOC G-Menu Suite, ASUS DWC & DisplayConfig)";
     in-out property <string> install-path: "";
 
     callback start-install();
@@ -4840,7 +5133,7 @@ export component SetupWindow inherits Window {
                     alignment: center;
                     spacing: 4px;
                     Text {
-                        text: "Monitor Manager v1.16";
+                        text: "Monitor Manager v1.17";
                         color: #ffffff;
                         font-size: 20px;
                         font-weight: 700;
@@ -4949,7 +5242,7 @@ export component SetupWindow inherits Window {
                 border-radius: 8px;
                 background: root.installing ? #454b59 : #f05a46;
                 Text {
-                    text: root.installing ? "Installazione... \{Math.round(root.install-progress * 100)}%" : "Installa v1.16 Ora";
+                    text: root.installing ? "Installazione... \{Math.round(root.install-progress * 100)}%" : "Installa v1.17 Ora";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;

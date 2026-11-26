@@ -335,7 +335,7 @@ pub fn resolve_asus_state(
     state.caps_raw = caps_raw.to_string();
 
     if let Some(idx) = caps_low.find("mpu_ver(") {
-        let rest = &caps_raw[idx + 8..];
+        let rest = &caps_low[idx + 8..];
         if let Some(end) = rest.find(')') {
             state.mpu_ver = rest[..end].trim().to_string();
         }

@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod aoc_vcp;
 mod asus_vcp;
 mod automation;
 mod ddc;
@@ -13,6 +14,7 @@ mod wmi_brightness;
 
 slint::include_modules!();
 
+use aoc_vcp::{vcp as aocvcp, AocAdvancedSlot, AocConfig, AocProfile};
 use asus_vcp::{vcp as avcp, DisplayProfileSnapshot, DwcConfig, GameVisualMode};
 use automation::{AiAction, AppTweakerRule, GlobalHotkeyService};
 use ddc::{DdcEngine, MonitorInfo};
@@ -660,6 +662,84 @@ fn to_ui_monitor(m: &MonitorInfo, vcps_probing: bool) -> UiMonitor {
         alignment_grid: m.asus.alignment_enabled,
         caps_raw: SharedString::from(m.asus.caps_raw.as_str()),
         mpu_ver: SharedString::from(m.asus.mpu_ver.as_str()),
+        is_aoc: m.aoc.is_aoc,
+        serial_number: SharedString::from(m.serial_number.as_str()),
+        model_desc: SharedString::from(m.aoc.model_desc.as_str()),
+        orientation_deg: m.os_info.orientation_deg as i32,
+        current_mode_label: SharedString::from(if m.os_info.current_width > 0 && m.os_info.current_height > 0 && m.os_info.current_refresh_rate > 0 {
+            format!("{}x{}-{}HZ", m.os_info.current_width, m.os_info.current_height, m.os_info.current_refresh_rate)
+        } else {
+            m.resolution.clone()
+        }),
+        available_modes: ModelRc::from(Rc::new(VecModel::from(
+            m.os_info
+                .available_modes
+                .iter()
+                .map(|dm| UiDisplayMode {
+                    width: dm.width as i32,
+                    height: dm.height as i32,
+                    hz: dm.hz as i32,
+                    label: SharedString::from(dm.label.as_str()),
+                })
+                .collect::<Vec<_>>(),
+        ))),
+        aoc_game_mode: m.aoc.game_mode,
+        aoc_game_mode_hw: m.aoc.game_mode_hw,
+        aoc_shadow_control: m.aoc.shadow_control,
+        aoc_shadow_hw: m.aoc.shadow_control_hw,
+        aoc_game_color: m.aoc.game_color,
+        aoc_game_color_hw: m.aoc.game_color_hw,
+        aoc_dcb_mode: m.aoc.dcb_mode,
+        aoc_dcb_hw: m.aoc.dcb_hw,
+        aoc_overdrive: m.aoc.overdrive,
+        aoc_overdrive_hw: m.aoc.overdrive_hw,
+        aoc_gamma_mode: m.aoc.gamma_mode,
+        aoc_gamma_hw: m.aoc.gamma_hw,
+        aoc_low_blue: m.aoc.low_blue_mode,
+        aoc_low_blue_hw: m.aoc.low_blue_hw,
+        aoc_eco_mode: m.aoc.eco_mode,
+        aoc_eco_hw: m.aoc.eco_hw,
+        aoc_dcr: m.aoc.dcr_enabled,
+        aoc_dcr_hw: m.aoc.dcr_hw,
+        aoc_frame_counter_pos: m.aoc.frame_counter_pos,
+        aoc_frame_counter_hw: m.aoc.frame_counter_hw,
+        aoc_dial_point: m.aoc.dial_point_enabled,
+        aoc_dial_point_hw: m.aoc.dial_point_hw,
+        aoc_audio_mute: m.aoc.audio_mute,
+        aoc_image_ratio: m.aoc.image_ratio as i32,
+        aoc_image_ratio_options: ModelRc::from(Rc::new(VecModel::from(
+            m.aoc
+                .image_ratio_options
+                .iter()
+                .map(|o| UiVcpOption {
+                    value: o.value as i32,
+                    label: SharedString::from(o.label.as_str()),
+                })
+                .collect::<Vec<_>>(),
+        ))),
+        aoc_input_options: ModelRc::from(Rc::new(VecModel::from(
+            m.aoc
+                .input_options
+                .iter()
+                .map(|o| UiVcpOption {
+                    value: o.value as i32,
+                    label: SharedString::from(o.label.as_str()),
+                })
+                .collect::<Vec<_>>(),
+        ))),
+        aoc_color_options: ModelRc::from(Rc::new(VecModel::from(
+            m.aoc
+                .color_temp_options
+                .iter()
+                .map(|o| UiVcpOption {
+                    value: o.value as i32,
+                    label: SharedString::from(o.label.as_str()),
+                })
+                .collect::<Vec<_>>(),
+        ))),
+        aoc_dsub_avail: m.aoc.dsub_available,
+        aoc_usb_charge_sup: m.aoc.usb_charge_supported,
+        aoc_light_fx_sup: m.aoc.light_fx_supported,
     }
 }
 
@@ -795,9 +875,103 @@ fn sync_gameplus_overlay(
         timer_mode: overlay_timer.max(0) as u32,
         timer_paused,
         fps_counter: mon.asus.fps_counter_mode != 0 && delivery != "hardware",
+        fps_corner: 0,
         alignment_grid: mon.asus.alignment_enabled && delivery != "hardware",
         offset_x: dwc.gameplus_offset_x,
         offset_y: dwc.gameplus_offset_y,
+    });
+}
+
+fn sync_aoc_overlay(overlay: &GamePlusOverlayEngine, mon: &MonitorInfo) {
+    let (_work, full) = win_system::get_monitor_rects(mon.id).unwrap_or(([0, 0, 1920, 1080], [0, 0, 1920, 1080]));
+    let show_fps = mon.aoc.frame_counter_pos > 0 && !mon.aoc.frame_counter_hw;
+    let show_crosshair = mon.aoc.dial_point_enabled && !mon.aoc.dial_point_hw;
+    overlay.update_config(OverlayConfig {
+        enabled: show_fps || show_crosshair,
+        target_rect: full,
+        crosshair_style: if show_crosshair { 3 } else { 0 },
+        timer_mode: 0,
+        timer_paused: false,
+        fps_counter: show_fps,
+        fps_corner: mon.aoc.frame_counter_pos.clamp(0, 4) as u32,
+        alignment_grid: false,
+        offset_x: 0,
+        offset_y: 0,
+    });
+}
+
+fn sync_aoc_config_to_ui(ui: &AppWindow, cfg: &AocConfig) {
+    let items: Vec<UiAocProfileItem> = cfg
+        .profiles
+        .iter()
+        .map(|p| UiAocProfileItem {
+            id: SharedString::from(p.id.as_str()),
+            name: SharedString::from(p.name.as_str()),
+        })
+        .collect();
+    ui.set_aoc_profiles(ModelRc::from(Rc::new(VecModel::from(items))));
+    ui.set_aoc_active_profile_id(SharedString::from(cfg.active_profile_id.as_str()));
+    ui.set_aoc_ext_bright_enabled(cfg.extended_brightness_enabled);
+    ui.set_aoc_ext_day_bright(cfg.day_brightness);
+    ui.set_aoc_ext_evening_bright(cfg.evening_brightness);
+    ui.set_aoc_ext_night_bright(cfg.night_brightness);
+    ui.set_aoc_sync_osd_msg(cfg.sync_osd_message);
+}
+
+fn apply_aoc_slot_to_monitor(
+    ddc: &DdcEngine,
+    monitor_id: usize,
+    slot: &AocAdvancedSlot,
+    ui_weak: &slint::Weak<AppWindow>,
+) {
+    ddc.set_vcp_value(monitor_id, aocvcp::BRIGHTNESS, slot.brightness.clamp(0, 100) as u32, false);
+    ddc.set_vcp_value(monitor_id, aocvcp::CONTRAST, slot.contrast.clamp(0, 100) as u32, false);
+    ddc.send_discrete_vcp(monitor_id, aocvcp::COLOR_PRESET, slot.color_temp.max(1) as u32);
+    ddc.set_vcp_value(monitor_id, aocvcp::RED_GAIN, slot.red_gain.clamp(0, 100) as u32, false);
+    ddc.set_vcp_value(monitor_id, aocvcp::GREEN_GAIN, slot.green_gain.clamp(0, 100) as u32, false);
+    ddc.set_vcp_value(monitor_id, aocvcp::BLUE_GAIN, slot.blue_gain.clamp(0, 100) as u32, false);
+
+    if let Some(mut mon) = ddc.get_cached_monitors().into_iter().find(|m| m.id == monitor_id) {
+        mon.aoc.shadow_control = slot.shadow_control;
+        mon.aoc.game_color = slot.game_color;
+        mon.aoc.dcb_mode = slot.dcb_mode;
+        mon.aoc.overdrive = slot.overdrive;
+        mon.aoc.gamma_mode = slot.gamma_mode;
+        if mon.aoc.overdrive_hw {
+            ddc.send_discrete_vcp(monitor_id, aocvcp::OVERDRIVE, slot.overdrive.max(0) as u32);
+        }
+        if mon.aoc.gamma_hw {
+            ddc.send_discrete_vcp(monitor_id, aocvcp::GAMMA, slot.gamma_mode.max(0) as u32);
+        }
+        let lut = aoc_vcp::build_lut_from_aoc_state(&mon.aoc);
+        ddc.update_software_lut(monitor_id, lut);
+    }
+
+    let slot_c = slot.clone();
+    let uw = ui_weak.clone();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(u) = uw.upgrade() {
+            let rc = u.get_monitors();
+            for i in 0..rc.row_count() {
+                if let Some(mut r) = rc.row_data(i) {
+                    if r.id as usize == monitor_id {
+                        r.brightness = slot_c.brightness;
+                        r.contrast = slot_c.contrast;
+                        r.color_temp = slot_c.color_temp;
+                        r.red_gain = slot_c.red_gain;
+                        r.green_gain = slot_c.green_gain;
+                        r.blue_gain = slot_c.blue_gain;
+                        r.aoc_shadow_control = slot_c.shadow_control;
+                        r.aoc_game_color = slot_c.game_color;
+                        r.aoc_dcb_mode = slot_c.dcb_mode;
+                        r.aoc_overdrive = slot_c.overdrive;
+                        r.aoc_gamma_mode = slot_c.gamma_mode;
+                        rc.set_row_data(i, r);
+                    }
+                }
+            }
+            u.invoke_sync_current_values();
+        }
     });
 }
 
@@ -962,7 +1136,29 @@ fn drop_tray_icon() {
     });
 }
 
+fn install_crash_log_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        if let Some(appdata) = env::var_os("APPDATA") {
+            let dir = std::path::PathBuf::from(appdata).join("MonitorManager");
+            let _ = std::fs::create_dir_all(&dir);
+            let log_path = dir.join("crash.log");
+            let msg = format!("Monitor Manager v{} panic: {}\n", APP_VERSION, info);
+            let _ = std::fs::write(log_path, msg);
+        }
+    }));
+}
+
+fn create_app_window_with_fallback() -> AppWindow {
+    if let Ok(ui) = AppWindow::new() {
+        return ui;
+    }
+    env::set_var("SLINT_BACKEND", "winit-software");
+    AppWindow::new().expect("Impossibile inizializzare la finestra nativa Slint")
+}
+
 fn main() {
+    install_crash_log_hook();
+
     if env::args().any(|a| a == "--uninstall") {
         perform_uninstall();
         return;
@@ -1002,6 +1198,11 @@ fn main() {
     let start_minimized = env::args().any(|a| a == "--minimized");
     let settings_state = Arc::new(Mutex::new(AppSettings::load()));
     let dwc_state = Arc::new(Mutex::new(DwcConfig::load()));
+    let aoc_state = Arc::new(Mutex::new(AocConfig::load()));
+    let aoc_session_backup: Arc<Mutex<Option<AocProfile>>> = Arc::new(Mutex::new({
+        let g = aoc_state.lock().unwrap();
+        Some(g.active_profile().clone())
+    }));
     let ddc_engine = Arc::new(DdcEngine::new());
     let overlay_engine = Arc::new(GamePlusOverlayEngine::spawn());
     let compare_backup: Arc<Mutex<Option<DisplayProfileSnapshot>>> = Arc::new(Mutex::new(None));
@@ -1014,7 +1215,7 @@ fn main() {
     let restart_after_exit: Arc<Mutex<Option<std::path::PathBuf>>> =
         Arc::new(Mutex::new(None));
 
-    let ui = AppWindow::new().expect("Impossibile inizializzare la finestra nativa Slint");
+    let ui = create_app_window_with_fallback();
 
     // Inizializza impostazioni nella UI
     {
@@ -1053,6 +1254,10 @@ fn main() {
         ui.set_ai_night_end(dwc.ai_night_end_hour as i32);
         sync_hotkeys_to_ui(&ui, &dwc);
         sync_rules_to_ui(&ui, &dwc);
+    }
+    {
+        let aoc = aoc_state.lock().unwrap();
+        sync_aoc_config_to_ui(&ui, &aoc);
     }
 
     // Callback di resync hardware automatico da DDC worker (es. cambio GameVisual -> reload slider reali)
@@ -1496,6 +1701,7 @@ fn main() {
             red_pct: r.clamp(50, 150),
             green_pct: g.clamp(50, 150),
             blue_pct: b.clamp(50, 150),
+            ..Default::default()
         };
         ddc_lut.update_software_lut(monitor_id as usize, cfg.clone());
         if let Some(u) = ui_weak_lut.upgrade() {
@@ -1876,6 +2082,657 @@ fn main() {
         drop_tray_icon();
         let _ = slint::quit_event_loop();
     });
+
+    // =========================================================================
+    // AOC G-MENU SUITE & DISPLAY WINDOWS CALLBACKS
+    // =========================================================================
+    {
+        let ddc_dm = Arc::clone(&ddc_engine);
+        let uw_dm = ui.as_weak();
+        ui.on_set_display_mode(move |monitor_id, w, h, hz| {
+            let ddc_c = Arc::clone(&ddc_dm);
+            let uw_c = uw_dm.clone();
+            thread::spawn(move || {
+                if let Ok(updated) = ddc_c.set_monitor_display_mode(monitor_id as usize, w as u32, h as u32, hz as u32) {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(u) = uw_c.upgrade() {
+                            push_monitors_to_ui(&u, &updated, false);
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    {
+        let ddc_or = Arc::clone(&ddc_engine);
+        let uw_or = ui.as_weak();
+        ui.on_set_orientation(move |monitor_id, deg| {
+            let ddc_c = Arc::clone(&ddc_or);
+            let uw_c = uw_or.clone();
+            thread::spawn(move || {
+                if let Ok(updated) = ddc_c.set_monitor_orientation(monitor_id as usize, deg as u32) {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(u) = uw_c.upgrade() {
+                            push_monitors_to_ui(&u, &updated, false);
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    {
+        let aoc_sel = Arc::clone(&aoc_state);
+        let aoc_bk = Arc::clone(&aoc_session_backup);
+        let ddc_sel = Arc::clone(&ddc_engine);
+        let uw_sel = ui.as_weak();
+        ui.on_aoc_select_profile(move |id| {
+            let prof = {
+                let mut cfg = aoc_sel.lock().unwrap();
+                if cfg.profiles.iter().any(|p| p.id == id.as_str()) {
+                    cfg.active_profile_id = id.to_string();
+                    cfg.save();
+                }
+                let p = cfg.active_profile().clone();
+                if let Some(u) = uw_sel.upgrade() {
+                    sync_aoc_config_to_ui(&u, &cfg);
+                }
+                p
+            };
+            *aoc_bk.lock().unwrap() = Some(prof.clone());
+            if let Some(u) = uw_sel.upgrade() {
+                if let Some(cm) = active_ui_monitor(&u) {
+                    let mid = cm.id as usize;
+                    let slot = prof.slot(prof.game_mode);
+                    apply_aoc_slot_to_monitor(&ddc_sel, mid, slot, &uw_sel);
+                }
+            }
+        });
+    }
+
+    {
+        let aoc_cr = Arc::clone(&aoc_state);
+        let uw_cr = ui.as_weak();
+        ui.on_aoc_create_profile(move |name| {
+            let trimmed = name.trim();
+            if trimmed.is_empty() {
+                return;
+            }
+            let mut cfg = aoc_cr.lock().unwrap();
+            let id = format!("profile_{}", cfg.profiles.len() + 1);
+            let mut new_prof = cfg.active_profile().clone();
+            new_prof.id = id.clone();
+            new_prof.name = trimmed.to_uppercase();
+            cfg.profiles.push(new_prof);
+            cfg.active_profile_id = id;
+            cfg.save();
+            if let Some(u) = uw_cr.upgrade() {
+                sync_aoc_config_to_ui(&u, &cfg);
+            }
+        });
+    }
+
+    {
+        let aoc_rn = Arc::clone(&aoc_state);
+        let uw_rn = ui.as_weak();
+        ui.on_aoc_rename_profile(move |id, name| {
+            let trimmed = name.trim();
+            if trimmed.is_empty() {
+                return;
+            }
+            let mut cfg = aoc_rn.lock().unwrap();
+            if let Some(p) = cfg.profiles.iter_mut().find(|p| p.id == id.as_str()) {
+                p.name = trimmed.to_uppercase();
+                cfg.save();
+            }
+            if let Some(u) = uw_rn.upgrade() {
+                sync_aoc_config_to_ui(&u, &cfg);
+            }
+        });
+    }
+
+    {
+        let aoc_imp = Arc::clone(&aoc_state);
+        let ddc_imp = Arc::clone(&ddc_engine);
+        let uw_imp = ui.as_weak();
+        ui.on_aoc_import_profile(move |monitor_id| {
+            let aoc_c = Arc::clone(&aoc_imp);
+            let ddc_c = Arc::clone(&ddc_imp);
+            let uw_c = uw_imp.clone();
+            thread::spawn(move || {
+                if let Some(path) = win_system::pick_open_file(
+                    "Importa Profilo AOC (JSON)",
+                    &[("AOC Profile JSON (*.json)", "*.json")],
+                ) {
+                    if let Ok(raw) = std::fs::read_to_string(&path) {
+                        if let Ok(mut prof) = serde_json::from_str::<AocProfile>(&raw) {
+                            let mut cfg = aoc_c.lock().unwrap();
+                            prof.id = format!("profile_{}", cfg.profiles.len() + 1);
+                            let pid = prof.id.clone();
+                            let slot = prof.slot(prof.game_mode).clone();
+                            cfg.profiles.push(prof);
+                            cfg.active_profile_id = pid;
+                            cfg.save();
+                            let cfg_clone = cfg.clone();
+                            drop(cfg);
+                            let uw_ui = uw_c.clone();
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(u) = uw_ui.upgrade() {
+                                    sync_aoc_config_to_ui(&u, &cfg_clone);
+                                }
+                            });
+                            apply_aoc_slot_to_monitor(&ddc_c, monitor_id as usize, &slot, &uw_c);
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    {
+        let aoc_exp = Arc::clone(&aoc_state);
+        ui.on_aoc_export_profile(move |_monitor_id| {
+            let prof = aoc_exp.lock().unwrap().active_profile().clone();
+            let default_name = format!("{}_aoc_profile.json", prof.name.replace([' ', '/', '\\', ':'], "_"));
+            thread::spawn(move || {
+                if let Some(path) = win_system::pick_save_file(
+                    "Esporta Profilo AOC (JSON)",
+                    &default_name,
+                    &[("AOC Profile JSON (*.json)", "*.json")],
+                ) {
+                    if let Ok(json) = serde_json::to_string_pretty(&prof) {
+                        let _ = std::fs::write(path, json);
+                    }
+                }
+            });
+        });
+    }
+
+    {
+        let aoc_can = Arc::clone(&aoc_state);
+        let aoc_bk = Arc::clone(&aoc_session_backup);
+        let ddc_can = Arc::clone(&ddc_engine);
+        let uw_can = ui.as_weak();
+        ui.on_aoc_cancel_changes(move |monitor_id| {
+            if let Some(prev) = aoc_bk.lock().unwrap().clone() {
+                {
+                    let mut cfg = aoc_can.lock().unwrap();
+                    let active = cfg.active_profile_mut();
+                    *active = prev.clone();
+                    cfg.save();
+                }
+                let slot = prev.slot(prev.game_mode);
+                apply_aoc_slot_to_monitor(&ddc_can, monitor_id as usize, slot, &uw_can);
+            }
+        });
+    }
+
+    {
+        let aoc_sav = Arc::clone(&aoc_state);
+        let aoc_bk = Arc::clone(&aoc_session_backup);
+        ui.on_aoc_save_profile(move |_monitor_id| {
+            let cfg = aoc_sav.lock().unwrap();
+            cfg.save();
+            *aoc_bk.lock().unwrap() = Some(cfg.active_profile().clone());
+        });
+    }
+
+    {
+        let aoc_rst = Arc::clone(&aoc_state);
+        let ddc_rst = Arc::clone(&ddc_engine);
+        let ov_rst = Arc::clone(&overlay_engine);
+        let uw_rst = ui.as_weak();
+        ui.on_aoc_reset_all(move |monitor_id| {
+            let mid = monitor_id as usize;
+            ddc_rst.send_discrete_vcp(mid, aocvcp::COLOR_RESET, 1);
+            ddc_rst.set_vcp_value(mid, aocvcp::BRIGHTNESS, 90, false);
+            ddc_rst.set_vcp_value(mid, aocvcp::CONTRAST, 50, false);
+            ddc_rst.send_discrete_vcp(mid, aocvcp::ECO_MODE, 0);
+            ddc_rst.send_discrete_vcp(mid, aocvcp::DCR, 0);
+            ddc_rst.reset_monitor_software_lut(mid);
+            let def = AocProfile::default();
+            {
+                let mut cfg = aoc_rst.lock().unwrap();
+                let cur = cfg.active_profile_mut();
+                let keep_id = cur.id.clone();
+                let keep_name = cur.name.clone();
+                *cur = def;
+                cur.id = keep_id;
+                cur.name = keep_name;
+                cfg.save();
+            }
+            if let Some(mut mon) = ddc_rst.get_cached_monitors().into_iter().find(|m| m.id == mid) {
+                mon.aoc.frame_counter_pos = 0;
+                mon.aoc.dial_point_enabled = false;
+                sync_aoc_overlay(&ov_rst, &mon);
+            }
+            if let Some(u) = uw_rst.upgrade() {
+                let rc = u.get_monitors();
+                for i in 0..rc.row_count() {
+                    if let Some(mut r) = rc.row_data(i) {
+                        if r.id == monitor_id {
+                            r.brightness = 90;
+                            r.contrast = 50;
+                            r.aoc_game_mode = 7;
+                            r.aoc_shadow_control = 50;
+                            r.aoc_game_color = 10;
+                            r.aoc_dcb_mode = 0;
+                            r.aoc_overdrive = 2;
+                            r.aoc_gamma_mode = 0;
+                            r.aoc_low_blue = 0;
+                            r.aoc_eco_mode = 0;
+                            r.aoc_dcr = false;
+                            r.aoc_frame_counter_pos = 0;
+                            r.aoc_dial_point = false;
+                            rc.set_row_data(i, r);
+                        }
+                    }
+                }
+                u.invoke_sync_current_values();
+            }
+        });
+    }
+
+    {
+        let aoc_gm = Arc::clone(&aoc_state);
+        let ddc_gm = Arc::clone(&ddc_engine);
+        let uw_gm = ui.as_weak();
+        ui.on_aoc_set_game_mode(move |monitor_id, mode| {
+            let mid = monitor_id as usize;
+            let slot = {
+                let mut cfg = aoc_gm.lock().unwrap();
+                let p = cfg.active_profile_mut();
+                p.game_mode = mode;
+                let s = if (1..=3).contains(&mode) {
+                    AocAdvancedSlot::preset_for_mode(mode)
+                } else {
+                    p.slot(mode).clone()
+                };
+                cfg.save();
+                s
+            };
+            if let Some(mon) = ddc_gm.get_cached_monitors().into_iter().find(|m| m.id == mid) {
+                if mon.aoc.game_mode_hw {
+                    ddc_gm.send_discrete_vcp(mid, aocvcp::GAME_MODE, mode.max(0) as u32);
+                }
+            }
+            apply_aoc_slot_to_monitor(&ddc_gm, mid, &slot, &uw_gm);
+            if let Some(u) = uw_gm.upgrade() {
+                let rc = u.get_monitors();
+                for i in 0..rc.row_count() {
+                    if let Some(mut r) = rc.row_data(i) {
+                        if r.id == monitor_id {
+                            r.aoc_game_mode = mode;
+                            rc.set_row_data(i, r);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let aoc_sl = Arc::clone(&aoc_state);
+        let ddc_sl = Arc::clone(&ddc_engine);
+        let uw_sl = ui.as_weak();
+        ui.on_aoc_select_adv_slot(move |monitor_id, slot_idx| {
+            let slot = {
+                let mut cfg = aoc_sl.lock().unwrap();
+                let p = cfg.active_profile_mut();
+                p.game_mode = slot_idx;
+                let s = p.slot(slot_idx).clone();
+                cfg.save();
+                s
+            };
+            apply_aoc_slot_to_monitor(&ddc_sl, monitor_id as usize, &slot, &uw_sl);
+            if let Some(u) = uw_sl.upgrade() {
+                let rc = u.get_monitors();
+                for i in 0..rc.row_count() {
+                    if let Some(mut r) = rc.row_data(i) {
+                        if r.id == monitor_id {
+                            r.aoc_game_mode = slot_idx;
+                            rc.set_row_data(i, r);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let aoc_st = Arc::clone(&aoc_state);
+        let ddc_st = Arc::clone(&ddc_engine);
+        let uw_st = ui.as_weak();
+        ui.on_aoc_set_setting(move |monitor_id, key, val| {
+            let mid = monitor_id as usize;
+            let k = key.as_str();
+            {
+                let mut cfg = aoc_st.lock().unwrap();
+                let p = cfg.active_profile_mut();
+                let gm = p.game_mode;
+                let slot = p.slot_mut(gm);
+                match k {
+                    "shadow_control" => slot.shadow_control = val,
+                    "game_color" => slot.game_color = val,
+                    "brightness" => slot.brightness = val,
+                    "contrast" => slot.contrast = val,
+                    "color_temp" => slot.color_temp = val,
+                    "red" => slot.red_gain = val,
+                    "green" => slot.green_gain = val,
+                    "blue" => slot.blue_gain = val,
+                    "dcb_mode" => slot.dcb_mode = val,
+                    "overdrive" => slot.overdrive = val,
+                    "gamma" => slot.gamma_mode = val,
+                    _ => {}
+                }
+                cfg.save();
+            }
+
+            if let Some(mut mon) = ddc_st.get_cached_monitors().into_iter().find(|m| m.id == mid) {
+                match k {
+                    "brightness" => ddc_st.set_vcp_value(mid, aocvcp::BRIGHTNESS, val.max(0) as u32, false),
+                    "contrast" => ddc_st.set_vcp_value(mid, aocvcp::CONTRAST, val.max(0) as u32, false),
+                    "color_temp" => ddc_st.send_discrete_vcp(mid, aocvcp::COLOR_PRESET, val.max(1) as u32),
+                    "red" => ddc_st.set_vcp_value(mid, aocvcp::RED_GAIN, val.max(0) as u32, false),
+                    "green" => ddc_st.set_vcp_value(mid, aocvcp::GREEN_GAIN, val.max(0) as u32, false),
+                    "blue" => ddc_st.set_vcp_value(mid, aocvcp::BLUE_GAIN, val.max(0) as u32, false),
+                    "shadow_control" => {
+                        mon.aoc.shadow_control = val;
+                        if mon.aoc.shadow_control_hw {
+                            ddc_st.set_vcp_value(mid, aocvcp::SHADOW_CONTROL, val.max(0) as u32, false);
+                        } else {
+                            ddc_st.update_software_lut(mid, aoc_vcp::build_lut_from_aoc_state(&mon.aoc));
+                        }
+                    }
+                    "game_color" => {
+                        mon.aoc.game_color = val;
+                        if mon.aoc.game_color_hw {
+                            ddc_st.set_vcp_value(mid, aocvcp::SATURATION, (val * 5).clamp(0, 100) as u32, false);
+                        } else {
+                            ddc_st.update_software_lut(mid, aoc_vcp::build_lut_from_aoc_state(&mon.aoc));
+                        }
+                    }
+                    "dcb_mode" => {
+                        mon.aoc.dcb_mode = val;
+                        if mon.aoc.dcb_hw {
+                            ddc_st.send_discrete_vcp(mid, aocvcp::DCB_MODE, val.max(0) as u32);
+                        } else {
+                            ddc_st.update_software_lut(mid, aoc_vcp::build_lut_from_aoc_state(&mon.aoc));
+                        }
+                    }
+                    "overdrive" => {
+                        mon.aoc.overdrive = val;
+                        if mon.aoc.overdrive_hw {
+                            ddc_st.send_discrete_vcp(mid, aocvcp::OVERDRIVE, val.max(0) as u32);
+                        }
+                    }
+                    "gamma" => {
+                        mon.aoc.gamma_mode = val;
+                        if mon.aoc.gamma_hw {
+                            ddc_st.send_discrete_vcp(mid, aocvcp::GAMMA, val.max(0) as u32);
+                        } else {
+                            ddc_st.update_software_lut(mid, aoc_vcp::build_lut_from_aoc_state(&mon.aoc));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            if let Some(u) = uw_st.upgrade() {
+                let rc = u.get_monitors();
+                for i in 0..rc.row_count() {
+                    if let Some(mut r) = rc.row_data(i) {
+                        if r.id == monitor_id {
+                            match k {
+                                "shadow_control" => r.aoc_shadow_control = val,
+                                "game_color" => r.aoc_game_color = val,
+                                "brightness" => r.brightness = val,
+                                "contrast" => r.contrast = val,
+                                "color_temp" => r.color_temp = val,
+                                "red" => r.red_gain = val,
+                                "green" => r.green_gain = val,
+                                "blue" => r.blue_gain = val,
+                                "dcb_mode" => r.aoc_dcb_mode = val,
+                                "overdrive" => r.aoc_overdrive = val,
+                                "gamma" => r.aoc_gamma_mode = val,
+                                _ => {}
+                            }
+                            rc.set_row_data(i, r);
+                        }
+                    }
+                }
+                u.invoke_sync_current_values();
+            }
+        });
+    }
+
+    {
+        let aoc_lb = Arc::clone(&aoc_state);
+        let ddc_lb = Arc::clone(&ddc_engine);
+        let uw_lb = ui.as_weak();
+        ui.on_aoc_set_low_blue(move |monitor_id, mode| {
+            let mid = monitor_id as usize;
+            {
+                let mut cfg = aoc_lb.lock().unwrap();
+                cfg.active_profile_mut().low_blue_mode = mode;
+                cfg.save();
+            }
+            if let Some(mut mon) = ddc_lb.get_cached_monitors().into_iter().find(|m| m.id == mid) {
+                mon.aoc.low_blue_mode = mode;
+                if mon.aoc.low_blue_hw {
+                    ddc_lb.send_discrete_vcp(mid, aocvcp::LOW_BLUE, mode.max(0) as u32);
+                } else {
+                    ddc_lb.update_software_lut(mid, aoc_vcp::build_lut_from_aoc_state(&mon.aoc));
+                }
+            }
+            if let Some(u) = uw_lb.upgrade() {
+                let rc = u.get_monitors();
+                for i in 0..rc.row_count() {
+                    if let Some(mut r) = rc.row_data(i) {
+                        if r.id == monitor_id {
+                            r.aoc_low_blue = mode;
+                            rc.set_row_data(i, r);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let aoc_ec = Arc::clone(&aoc_state);
+        let ddc_ec = Arc::clone(&ddc_engine);
+        let uw_ec = ui.as_weak();
+        ui.on_aoc_set_eco_mode(move |monitor_id, mode| {
+            let mid = monitor_id as usize;
+            {
+                let mut cfg = aoc_ec.lock().unwrap();
+                cfg.active_profile_mut().eco_mode = mode;
+                cfg.save();
+            }
+            if let Some(mon) = ddc_ec.get_cached_monitors().into_iter().find(|m| m.id == mid) {
+                let vcp_val = mon.aoc.eco_ui_to_vcp(mode);
+                ddc_ec.send_discrete_vcp(mid, aocvcp::ECO_MODE, vcp_val);
+            }
+            if let Some(u) = uw_ec.upgrade() {
+                let rc = u.get_monitors();
+                for i in 0..rc.row_count() {
+                    if let Some(mut r) = rc.row_data(i) {
+                        if r.id == monitor_id {
+                            r.aoc_eco_mode = mode;
+                            rc.set_row_data(i, r);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let aoc_eb = Arc::clone(&aoc_state);
+        let uw_eb = ui.as_weak();
+        ui.on_aoc_set_ext_brightness(move |_monitor_id, enabled, day, evening, night| {
+            let mut cfg = aoc_eb.lock().unwrap();
+            cfg.extended_brightness_enabled = enabled;
+            cfg.day_brightness = day.clamp(0, 100);
+            cfg.evening_brightness = evening.clamp(0, 100);
+            cfg.night_brightness = night.clamp(0, 100);
+            cfg.save();
+            if let Some(u) = uw_eb.upgrade() {
+                sync_aoc_config_to_ui(&u, &cfg);
+            }
+        });
+    }
+
+    {
+        let aoc_dcr = Arc::clone(&aoc_state);
+        let ddc_dcr = Arc::clone(&ddc_engine);
+        let uw_dcr = ui.as_weak();
+        ui.on_aoc_set_dcr(move |monitor_id, enabled| {
+            let mid = monitor_id as usize;
+            {
+                let mut cfg = aoc_dcr.lock().unwrap();
+                cfg.active_profile_mut().dcr_enabled = enabled;
+                cfg.save();
+            }
+            ddc_dcr.send_discrete_vcp(mid, aocvcp::DCR, if enabled { 1 } else { 0 });
+            if let Some(u) = uw_dcr.upgrade() {
+                let rc = u.get_monitors();
+                for i in 0..rc.row_count() {
+                    if let Some(mut r) = rc.row_data(i) {
+                        if r.id == monitor_id {
+                            r.aoc_dcr = enabled;
+                            rc.set_row_data(i, r);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let aoc_fc = Arc::clone(&aoc_state);
+        let ddc_fc = Arc::clone(&ddc_engine);
+        let ov_fc = Arc::clone(&overlay_engine);
+        let uw_fc = ui.as_weak();
+        ui.on_aoc_set_frame_counter(move |monitor_id, pos| {
+            let mid = monitor_id as usize;
+            {
+                let mut cfg = aoc_fc.lock().unwrap();
+                cfg.active_profile_mut().frame_counter_pos = pos;
+                cfg.save();
+            }
+            if let Some(mut mon) = ddc_fc.get_cached_monitors().into_iter().find(|m| m.id == mid) {
+                mon.aoc.frame_counter_pos = pos;
+                if let Some(u) = uw_fc.upgrade() {
+                    let rc = u.get_monitors();
+                    for i in 0..rc.row_count() {
+                        if let Some(mut r) = rc.row_data(i) {
+                            if r.id == monitor_id {
+                                r.aoc_frame_counter_pos = pos;
+                                mon.aoc.dial_point_enabled = r.aoc_dial_point;
+                                rc.set_row_data(i, r);
+                            }
+                        }
+                    }
+                }
+                sync_aoc_overlay(&ov_fc, &mon);
+            }
+        });
+    }
+
+    {
+        let aoc_dp = Arc::clone(&aoc_state);
+        let ddc_dp = Arc::clone(&ddc_engine);
+        let ov_dp = Arc::clone(&overlay_engine);
+        let uw_dp = ui.as_weak();
+        ui.on_aoc_set_dial_point(move |monitor_id, enabled| {
+            let mid = monitor_id as usize;
+            {
+                let mut cfg = aoc_dp.lock().unwrap();
+                cfg.active_profile_mut().dial_point_enabled = enabled;
+                cfg.save();
+            }
+            if let Some(mut mon) = ddc_dp.get_cached_monitors().into_iter().find(|m| m.id == mid) {
+                mon.aoc.dial_point_enabled = enabled;
+                if mon.aoc.dial_point_hw {
+                    ddc_dp.send_discrete_vcp(mid, aocvcp::DIAL_POINT, if enabled { 1 } else { 0 });
+                }
+                if let Some(u) = uw_dp.upgrade() {
+                    let rc = u.get_monitors();
+                    for i in 0..rc.row_count() {
+                        if let Some(mut r) = rc.row_data(i) {
+                            if r.id == monitor_id {
+                                r.aoc_dial_point = enabled;
+                                mon.aoc.frame_counter_pos = r.aoc_frame_counter_pos;
+                                rc.set_row_data(i, r);
+                            }
+                        }
+                    }
+                }
+                sync_aoc_overlay(&ov_dp, &mon);
+            }
+        });
+    }
+
+    {
+        let ddc_am = Arc::clone(&ddc_engine);
+        let uw_am = ui.as_weak();
+        ui.on_aoc_set_audio_mute(move |monitor_id, muted| {
+            ddc_am.send_discrete_vcp(monitor_id as usize, aocvcp::AUDIO_MUTE, if muted { 1 } else { 2 });
+            if let Some(u) = uw_am.upgrade() {
+                let rc = u.get_monitors();
+                for i in 0..rc.row_count() {
+                    if let Some(mut r) = rc.row_data(i) {
+                        if r.id == monitor_id {
+                            r.aoc_audio_mute = muted;
+                            rc.set_row_data(i, r);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let ddc_ir = Arc::clone(&ddc_engine);
+        let uw_ir = ui.as_weak();
+        ui.on_aoc_set_image_ratio(move |monitor_id, val| {
+            ddc_ir.send_discrete_vcp(monitor_id as usize, aocvcp::IMAGE_RATIO, val.max(0) as u32);
+            if let Some(u) = uw_ir.upgrade() {
+                let rc = u.get_monitors();
+                for i in 0..rc.row_count() {
+                    if let Some(mut r) = rc.row_data(i) {
+                        if r.id == monitor_id {
+                            r.aoc_image_ratio = val;
+                            rc.set_row_data(i, r);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let ddc_ds = Arc::clone(&ddc_engine);
+        ui.on_aoc_dsub_auto(move |monitor_id| {
+            ddc_ds.send_discrete_vcp(monitor_id as usize, aocvcp::AUTO_SETUP_DSUB, 1);
+        });
+    }
+
+    {
+        let aoc_sm = Arc::clone(&aoc_state);
+        let uw_sm = ui.as_weak();
+        ui.on_aoc_set_sync_msg(move |enabled| {
+            let mut cfg = aoc_sm.lock().unwrap();
+            cfg.sync_osd_message = enabled;
+            cfg.save();
+            if let Some(u) = uw_sm.upgrade() {
+                u.set_aoc_sync_osd_msg(enabled);
+            }
+        });
+    }
 
     // =========================================================================
     // ASUS DISPLAYWIDGET CENTER PARITY CALLBACKS, HOTKEYS & AUTOMATION WORKER
@@ -2740,12 +3597,14 @@ fn main() {
     {
         let ddc_auto = Arc::clone(&ddc_engine);
         let dwc_auto = Arc::clone(&dwc_state);
+        let aoc_auto = Arc::clone(&aoc_state);
         let sd_auto = Arc::clone(&shutting_down);
         let uw_auto = ui.as_weak();
         thread::spawn(move || {
             let mut last_rule_key = String::new();
             let mut last_ai_mode: i32 = -1;
             let mut last_night_active = false;
+            let mut last_ext_bright: i32 = -1;
             loop {
                 thread::sleep(std::time::Duration::from_millis(1500));
                 if sd_auto.load(Ordering::Relaxed) {
@@ -2758,6 +3617,24 @@ fn main() {
                 let mons = ddc_auto.get_cached_monitors();
                 let Some(mon) = mons.first() else { continue; };
                 let mid = mon.id;
+
+                let aoc_cfg = aoc_auto.lock().unwrap().clone();
+                if aoc_cfg.extended_brightness_enabled {
+                    let h = automation::current_local_hour() as u32;
+                    let target_b = if h >= aoc_cfg.night_hour || h < 7 {
+                        aoc_cfg.night_brightness
+                    } else if h >= aoc_cfg.evening_hour {
+                        aoc_cfg.evening_brightness
+                    } else {
+                        aoc_cfg.day_brightness
+                    };
+                    if target_b != last_ext_bright {
+                        last_ext_bright = target_b;
+                        ddc_auto.set_vcp_value(mid, aocvcp::BRIGHTNESS, target_b.clamp(0, 100) as u32, false);
+                    }
+                } else {
+                    last_ext_bright = -1;
+                }
 
                 let fg = win_system::get_foreground_app();
                 let mut matched_rule = false;
@@ -2839,6 +3716,7 @@ fn main() {
             timer_mode: 0,
             timer_paused: false,
             fps_counter: false,
+            fps_corner: 0,
             alignment_grid: false,
             offset_x: 0,
             offset_y: 0,

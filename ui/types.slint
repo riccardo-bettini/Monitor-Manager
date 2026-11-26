@@ -3,6 +3,18 @@ export struct UiVcpOption {
     label: string,
 }
 
+export struct UiDisplayMode {
+    width: int,
+    height: int,
+    hz: int,
+    label: string,
+}
+
+export struct UiAocProfileItem {
+    id: string,
+    name: string,
+}
+
 export struct UiDiscoveredVcp {
     code: int,
     hex-code: string,
@@ -99,6 +111,43 @@ export struct UiMonitor {
     alignment-grid: bool,
     caps-raw: string,
     mpu-ver: string,
+    // AOC G-Menu Suite parity fields
+    is-aoc: bool,
+    serial-number: string,
+    model-desc: string,
+    orientation-deg: int,
+    current-mode-label: string,
+    available-modes: [UiDisplayMode],
+    aoc-game-mode: int,
+    aoc-game-mode-hw: bool,
+    aoc-shadow-control: int,
+    aoc-shadow-hw: bool,
+    aoc-game-color: int,
+    aoc-game-color-hw: bool,
+    aoc-dcb-mode: int,
+    aoc-dcb-hw: bool,
+    aoc-overdrive: int,
+    aoc-overdrive-hw: bool,
+    aoc-gamma-mode: int,
+    aoc-gamma-hw: bool,
+    aoc-low-blue: int,
+    aoc-low-blue-hw: bool,
+    aoc-eco-mode: int,
+    aoc-eco-hw: bool,
+    aoc-dcr: bool,
+    aoc-dcr-hw: bool,
+    aoc-frame-counter-pos: int,
+    aoc-frame-counter-hw: bool,
+    aoc-dial-point: bool,
+    aoc-dial-point-hw: bool,
+    aoc-audio-mute: bool,
+    aoc-image-ratio: int,
+    aoc-image-ratio-options: [UiVcpOption],
+    aoc-input-options: [UiVcpOption],
+    aoc-color-options: [UiVcpOption],
+    aoc-dsub-avail: bool,
+    aoc-usb-charge-sup: bool,
+    aoc-light-fx-sup: bool,
 }
 
 export struct UiWindowEntry {
